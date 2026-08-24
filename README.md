@@ -1,5 +1,7 @@
 # LagTwoPositivity
 
+Notice：I'm Japanese and not a native English speaker, so I'm using an LLM for translation!
+
 A single, self-contained Lean 4 file about **lag-coupled quadratic forms over nonnegative
 integer signals**: the exact block-decomposition (GD) identity, the fact that only lags `≥ 2`
 can cross a block boundary, preservation of any pointwise denominator, and a Rayleigh
