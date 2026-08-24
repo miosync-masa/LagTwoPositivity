@@ -1,0 +1,5 @@
+name = "LagTwoPositivity"
+defaultTargets = ["LagTwoPositivity"]
+
+[[lean_lib]]
+name = "LagTwoPositivity"
