@@ -1,74 +1,110 @@
 /-
-# Lag-2 positivity: the block-decomposition (GD) identity
+# Lag-2 positivity: the block decomposition with position-dependent coefficients
 
-A self-contained formalisation of the exact decomposition of a lag-2 quadratic form
-over a nonnegative integer signal into its *positive blocks* plus an *isolated-zero*
-coupling term.
+A self-contained formalisation of the exact decomposition of a banded quadratic form over a
+nonnegative integer signal into its *positive blocks* plus an *isolated-zero* coupling, and
+of the consequences for copositive matrices.
+
+## Coefficients depend on position, not only on lag
+
+    c : Nat → Nat → Int          -- `c i L` is the coefficient of `x_i · x_{i+L}`
+    Qf c x = Σ_L Σ_i c i L · x_i · x_{i+L}
+
+No Toeplitz (diagonal-constant) structure is assumed anywhere in Parts 1–5.  `Bandwidth c K`
+says that `c i L = 0` for every `L > K`.
+
+## Blocks must preserve position
+
+`restr x` lists one list per maximal run of strictly positive entries of `x`.  Each of them
+has **the same length as `x`**: it agrees with `x` on its own run and is `0` everywhere else.
+
+This is not cosmetic.  With blocks taken as *extracted sublists* — re-indexed from `0` — the
+decomposition identity is **false** as soon as the coefficients depend on position.  Already
+a diagonal matrix breaks it: take `c i 0 = (1, 1, 5)` and all other `c i L = 0`, and
+`x = [1,0,1]`.  Then `Qf c x = 6` and the cross term is `0`; the position-preserving blocks
+give `Qf c [1,0,0] + Qf c [0,0,1] = 1 + 5 = 6`, but the extracted blocks give
+`Qf c [1] + Qf c [1] = 1 + 1 = 2`.  `extraction_breaks_position_dependence` records exactly
+this, and the build-time sweep `identityCounts` measures how often it happens.
 
 ## What is here
 
-For integer coefficients `a b c` and a list `x : List Int`,
+### Part 0 — the lag-2 Toeplitz form (kept for §6–§7 of the Letter)
 
-    Q a b c x  =  Σ_i a·x_i²  +  Σ_i b·x_i·x_{i+1}  +  Σ_i c·x_i·x_{i+2}
+`Q a b c x = Σ_i a·x_i² + Σ_i b·x_i·x_{i+1} + Σ_i c·x_i·x_{i+2}`, `blocks x` the *extracted*
+maximal positive runs, `iso x = Σ_{isolated zeros i} x_{i-1}·x_{i+1}`.
 
-(indices taken only inside range),
-
-    blocks x   =  the maximal runs of strictly positive entries of `x`
-    iso x      =  Σ over i with x_i = 0, x_{i-1} > 0, x_{i+1} > 0  of  x_{i-1}·x_{i+1}
-
-### Part 0 — the lag-2 results
-
-  * `gd_identity`          `Q x = Σ_{B ∈ blocks x} Q B + c · iso x`
+  * `gd_identity`          `Q x = Σ_{B ∈ blocks x} Q B + c · iso x`   (Toeplitz only!)
   * `isolated_zero_strict` `0 < c` and `0 < iso x`  ⟹  `Σ_B Q B < Q x`
-  * `sharpness_at_zero`    `Q a b 0 [1,1,0,1,1] = 2 · Q a b 0 [1,1]`
+  * `sharpness_at_zero`    `Q a b 0 [1,1,0,1,1] = 2 · Q a b 0 [1,1]`  — criticality at `c = 0`
 
-### Part 1 — an arbitrary lag-coefficient list
+### Part 1 — position-dependent coefficients (Theorems 2.1, 2.2, Corollary 2.1)
 
-`Qgen coef x = Σ_{L < coef.length} coef[L] · Σ_i x_i · x_{i+L}` and
+  * `gd_identity_posdep`         `Qf c x = Σ_r Qf c (x^(r)) + cross c 0 x`
+  * `straddle_lag_ge_two`        the lag-1 coefficient cancels identically out of `cross`
+  * `cross_eq_zero_of_band_one`  `Bandwidth c 1` ⟹ `cross ≡ 0`
+  * `cross_eq_isoW`              `Bandwidth c 2` ⟹ `cross c i x = isoW c i x`,
+                                 `isoW c 0 x = Σ_{isolated zeros k} c (k-1) 2 · x_{k-1}·x_{k+1}`
+  * `adjacent_same_restr`        two adjacent positive marks share a run
 
-  * `Q_eq_Qgen`             `Q a b c = Qgen [a,b,c]`
-  * `gd_identity_general`   `Qgen coef x = Σ_B Qgen coef B + crossDefect coef x`
-  * `straddle_lag_ge_two`   the lag-1 coefficient cancels identically out of `crossDefect`
-  * `adjacent_same_block`   `x_i > 0` and `x_{i+1} > 0` ⟹ both lie in one block
-  * `crossDefect_abc`       `crossDefect [a,b,c] x = c · iso x`
-  * `gd_identity_is_specialization`  `gd_identity` re-derived from the general one
+### Part 2 — the Toeplitz specialisation
 
-`crossDefect coef x` is the cross-block pair sum, written as *all* later partners minus the
-partners inside one's own block: `Σ_i x_i · (dot (tl coef) rᵢ − dot (tl coef) (headBlock rᵢ))`.
+`toep a b c i L` is `a, b, c, 0, 0, …` independently of `i`.
 
-### Part 2 — norm preservation and Rayleigh transfer
+  * `Qf_toep`               `Qf (toep a b c) = Q a b c`
+  * `gd_identity_restr`     Part 0's identity re-derived from `cross_eq_isoW`
+  * `Qblocks_eq_Qrestr`     **extraction and masking agree exactly when `c` is Toeplitz**
 
-  * `blocks_sqnorm_preserved`  `Σ_B sqnorm B = sqnorm x`
-  * `rayleigh_transfer`        some block strictly beats the whole, stated by cross
-                               multiplication so everything stays in `Int`
+### Part 3 — masking and support
 
-### Part 3 — an arbitrary pointwise denominator
+  * `Masked w u`        `w` is `u` with some entries zeroed (same length, same order)
+  * `restr_masked`      every `x^(r)` is a masking of `x`
+  * `restr_mem_pos`     every `x^(r)` carries a strictly positive mark
+
+### Part 4 — denominators and Rayleigh transfer (Lemma 4.1, Cor. 3.1, Thm 4.1, Cor. 4.1)
 
 `D d x = Σ_i d (x_i)`.
 
-  * `blocks_D_preserved`   `d 0 = 0` ⟹ `Σ_B D d B = D d x`.  **No positivity of `d`.**
-  * `blocks_sqnorm_preserved_from_D`  Part 2's law as the `d = (· * ·)` instance
-  * `rayleigh_transfer_general`       arbitrary `d` with `d 0 = 0` and `0 < t → 0 < d t`
-  * `rayleigh_transfer_from_general`  Part 2's transfer as the `d = (· * ·)` instance
-  * `rayleigh_transfer_sum`           the `d = id` instance: denominator `Σ_i x_i`
+  * `restr_D_preserved`            `d 0 = 0` ⟹ `Σ_r D d (x^(r)) = D d x`.  **No positivity of `d`.**
+  * `blocks_D_preserved`           the same for *extracted* blocks — denominators are
+                                   position-blind, so only the quadratic form needs masking
+  * `isolated_zero_strict_posdep`  `Bandwidth c 2`, all `c i 2 > 0`, `0 < iso x`
+                                   ⟹ `Σ_r Qf c (x^(r)) < Qf c x`
+  * `rayleigh_transfer_posdep`     some block strictly beats the whole, for an arbitrary
+                                   pointwise denominator, stated by cross multiplication so
+                                   everything stays in `Int`
+  * `rayleigh_transfer_posdep_sum`, `rayleigh_transfer_sqnorm`, `rayleigh_transfer_toeplitz`
 
-The preservation law never touches the shape of `d`: entries outside every block are exactly
-`0` under `Nonneg`, so they contribute `d 0 = 0` to both sides.  Positivity of `d` enters only
-in the transfer, to know each block has a strictly positive denominator.
+### Part 5 — copositive matrices
+
+`Copositive c` is `∀ x ≥ 0, Qf c x ≥ 0`; a *zero* is a nonnegative `u ≠ 0` with `Qf c u = 0`;
+a *minimal* zero is one no other zero sits strictly inside.
+
+  * `copositive_zero_iso`               (i)  every zero has `iso u = 0`: its support is cut
+                                             by gaps of width `≥ 2`
+  * `copositive_restr_isZero`                every block restriction of a zero is a zero
+  * `copositive_minimalZero_isInterval` (ii) the support of a minimal zero is an interval
+
+Both are four-line consequences of `cross_eq_isoW` and `restr_D_preserved`: if `iso u > 0`
+then `Σ_r Qf c (u^(r)) = Qf c u − isoW c 0 u < 0`, while every `u^(r) ≥ 0` forces every
+`Qf c (u^(r)) ≥ 0`.
 
 ## The nonnegativity hypothesis
 
-`gd_identity` is **false** without `Nonneg x`.  For `x = [1,-1,1]` the positive runs are
-`[[1],[1]]` and `iso x = 0`, so the right-hand side is `2a`, while `Q x = 3a - 2b + c`.
-Nonnegativity is what forces every non-block entry to be exactly `0`, which is what kills
-the lag-1 cross-boundary term and turns the lag-2 cross-boundary term into `iso`.
+The identity is **false** without `Nonneg x`.  For `x = [1,-1,1]` the positive runs are
+`[1,0,0]` and `[0,0,1]`, so position `1` sits outside every run and its contributions
+`c 1 0 · x_1²` and `c 1 1 · x_1 · x_2` are simply lost: the identity fails by exactly
+`c 1 0 − c 1 1`.  With the diagonal `cEx` of the counterexample family that is
+`7 ≠ 6 + 0` (`nonneg_is_needed`).  Nonnegativity is what forces every non-block entry to be
+exactly `0`, which kills the lag-1 cross-boundary term and turns the lag-2 cross-boundary
+term into `isoW`.
 
 ## Dependencies
 
 **Lean 4 core only.**  No Mathlib, no Batteries, no `native_decide`.
 `#print axioms` on every theorem reports exactly `[propext, Quot.sound]` — in particular
 no `Classical.choice` and no `sorryAx`.  The one finite search (`list_forall_or_exists`,
-used by `rayleigh_transfer`) is decidable, so it needs no excluded middle.
+used by the Rayleigh transfers) is decidable, so it needs no excluded middle; likewise
+every proof by contradiction goes through `by_cases` on a decidable proposition.
 
 Squares are written `v * v` rather than `v ^ 2` so that `omega` sees them as atoms;
 `Q_cons_sq` records that this agrees with the `^ 2` form.
@@ -82,6 +118,12 @@ formalised here.  Those are cited from the existing reports in the accompanying 
 
 namespace LagTwoPositivity
 
+
+/-! ## Part 0.  The lag-2 Toeplitz form
+
+`Q a b c` and the *extracted* blocks of the original development.  Everything here is the
+`c i L = (a, b, c, 0, …)` instance of Part 1 (see Part 2), and it is kept because §6–§7 of
+the Letter are statements about the single scalar `c`. -/
 def hd : List Int → Int
   | []     => 0
   | v :: _ => v
@@ -265,214 +307,7 @@ theorem Qblocks_cons_pos_pos (hr : Nonneg r) (h : 0 < v) (h2 : 0 < hd r) :
 
 end QblocksRec
 
-
-/-! ## Part 1.  A lag-indexed generalisation
-
-`Qgen coef x = Σ_{L < coef.length} coef[L] * Σ_i x_i * x_{i+L}`, written with a
-one-step cons recursion.  `dot cs r` is the truncating inner product `Σ_k cs[k] * r[k]`,
-so `v * dot (tl coef) r` collects every pair whose left endpoint is the head `v`. -/
-
-section Gen
-
-/-- Truncating inner product `Σ_k cs[k] * r[k]`. -/
-def dot : List Int → List Int → Int
-  | [],      _       => 0
-  | _,       []      => 0
-  | c :: cs, v :: vs => c * v + dot cs vs
-
-/-- `Qgen coef x = Σ_{L < coef.length} coef[L] * Σ_i x_i * x_{i+L}`. -/
-def Qgen (coef : List Int) : List Int → Int
-  | []     => 0
-  | v :: r => hd coef * (v * v) + v * dot (tl coef) r + Qgen coef r
-
-@[simp] theorem dot_nil_left {r : List Int} : dot [] r = 0 := by cases r <;> rfl
-@[simp] theorem dot_nil_right {cs : List Int} : dot cs [] = 0 := by cases cs <;> rfl
-
-/-- `dot` peels one index off both arguments, with no side condition. -/
-theorem dot_eq (cs r : List Int) : dot cs r = hd cs * hd r + dot (tl cs) (tl r) := by
-  cases cs with
-  | nil => simp
-  | cons c cs' =>
-    cases r with
-    | nil => simp
-    | cons v vs => simp [dot]
-
-@[simp] theorem Qgen_nil {coef : List Int} : Qgen coef [] = 0 := rfl
-
-theorem Qgen_cons {coef : List Int} {v : Int} {r : List Int} :
-    Qgen coef (v :: r) = hd coef * (v * v) + v * dot (tl coef) r + Qgen coef r := rfl
-
-theorem mul_left_comm' (u w z : Int) : u * (w * z) = w * (u * z) := by
-  rw [← Int.mul_assoc, Int.mul_comm u w, Int.mul_assoc]
-
-/-- The lag-2 form of Part 0 is the `coef = [a,b,c]` instance of `Qgen`. -/
-theorem Q_eq_Qgen (a b c : Int) : ∀ x : List Int, Q a b c x = Qgen [a, b, c] x := by
-  intro x
-  induction x with
-  | nil => rfl
-  | cons v r ih =>
-    rw [Q_cons, Qgen_cons, ih]
-    have hdot : dot [b, c] r = b * hd r + c * hd (tl r) := by
-      rw [dot_eq [b, c] r]
-      simp only [hd_cons, tl_cons]
-      rw [dot_eq [c] (tl r)]
-      simp
-    simp only [hd_cons, tl_cons, hdot, Int.mul_add, mul_left_comm' v b, mul_left_comm' v c]
-    omega
-
-
-/-- `dot` against a two-element coefficient list. -/
-theorem dot_pair (b c : Int) (r : List Int) : dot [b, c] r = b * hd r + c * hd (tl r) := by
-  rw [dot_eq [b, c] r]
-  simp only [hd_cons, tl_cons]
-  rw [dot_eq [c] (tl r)]
-  simp
-
-/-- The block that the head of `r` belongs to, or `[]` when the head is not positive. -/
-def headBlock (r : List Int) : List Int := if 0 < hd r then (blocks r).headD [] else []
-
-/-- `crossDefect coef x` is `Σ_i x_i * (Σ_{j > i, j outside i's block} coef[j-i] * x_j)`.
-The inner factor is written as `dot (tl coef) r - dot (tl coef) (headBlock r)`: the sum over
-*all* later partners minus the sum over the partners inside `i`'s own block. -/
-def crossDefect (coef : List Int) : List Int → Int
-  | []     => 0
-  | v :: r => (if 0 < v then v * (dot (tl coef) r - dot (tl coef) (headBlock r)) else 0)
-              + crossDefect coef r
-
-@[simp] theorem crossDefect_nil {coef : List Int} : crossDefect coef [] = 0 := rfl
-
-theorem crossDefect_cons {coef : List Int} {v : Int} {r : List Int} :
-    crossDefect coef (v :: r)
-      = (if 0 < v then v * (dot (tl coef) r - dot (tl coef) (headBlock r)) else 0)
-        + crossDefect coef r := rfl
-
-theorem headBlock_of_pos {r : List Int} (h : 0 < hd r) :
-    headBlock r = (blocks r).headD [] := by simp [headBlock, h]
-
-theorem headBlock_of_nonpos {r : List Int} (h : ¬ 0 < hd r) : headBlock r = [] := by
-  simp [headBlock, h]
-
-/-- Under nonnegativity the head of `i`'s block is `x_i` itself — including the degenerate
-case `x_i = 0`, where both sides are `0`. -/
-theorem hd_headBlock {r : List Int} (hr : Nonneg r) : hd (headBlock r) = hd r := by
-  by_cases h : 0 < hd r
-  · rw [headBlock_of_pos h]; exact hd_firstBlock h
-  · have hge : 0 ≤ hd r := nonneg_hd hr
-    have h0 : hd r = 0 := by omega
-    rw [headBlock_of_nonpos h, h0]; rfl
-
-theorem headBlock_ne_nil {r : List Int} (h : 0 < hd r) : headBlock r ≠ [] := by
-  intro hnil
-  have : hd (headBlock r) = hd r := by rw [headBlock_of_pos h]; exact hd_firstBlock h
-  rw [hnil] at this
-  simp only [hd_nil] at this
-  omega
-
-theorem hd_mem {x : List Int} (h : x ≠ []) : hd x ∈ x := by
-  cases x with
-  | nil => exact absurd rfl h
-  | cons u t => simp [hd]
-
-/-- **Lag 0 and lag 1 never straddle a block boundary.**  In `crossDefect` the coefficient
-`cs[0]` — i.e. `coef[1]`, the lag-1 coefficient — cancels identically, so the cross term is
-supported on lags `≥ 2`. -/
-theorem straddle_lag_ge_two (cs : List Int) {r : List Int} (hr : Nonneg r) :
-    dot cs r - dot cs (headBlock r)
-      = dot (tl cs) (tl r) - dot (tl cs) (tl (headBlock r)) := by
-  rw [dot_eq cs r, dot_eq cs (headBlock r), hd_headBlock hr]
-  omega
-
-/-- The block-membership form of the same fact: if `x_i > 0` and `x_{i+1} > 0` then both sit
-in one and the same block. -/
-theorem adjacent_same_block {v : Int} {r : List Int} (hv : 0 < v) (hw : 0 < hd r) :
-    v ∈ (blocks (v :: r)).headD [] ∧ hd r ∈ (blocks (v :: r)).headD [] := by
-  rw [blocks_cons_pos_pos hv hw]
-  simp only [List.headD_cons]
-  refine ⟨List.mem_cons_self .., ?_⟩
-  refine List.mem_cons_of_mem _ ?_
-  have hne : headBlock r ≠ [] := headBlock_ne_nil hw
-  have hh : hd (headBlock r) = hd r := by rw [headBlock_of_pos hw]; exact hd_firstBlock hw
-  have := hd_mem hne
-  rw [hh] at this
-  rw [← headBlock_of_pos hw]
-  exact this
-
-/-- **General GD identity.**  For an arbitrary lag-coefficient list, the excess of the whole
-form over the sum of its block forms is exactly the cross-block pair sum. -/
-theorem gd_identity_general (coef : List Int) :
-    ∀ x : List Int, Nonneg x →
-      Qgen coef x = ((blocks x).map (Qgen coef)).sum + crossDefect coef x := by
-  intro x
-  induction x with
-  | nil => intro _; simp
-  | cons v r ih =>
-    intro hx
-    have hr : Nonneg r := nonneg_tail hx
-    have IH := ih hr
-    rw [Qgen_cons, crossDefect_cons]
-    by_cases hv : 0 < v
-    · by_cases hw : 0 < hd r
-      · rw [blocks_cons_pos_pos hv hw, if_pos hv, headBlock_of_pos hw]
-        cases hb : blocks r with
-        | nil => exact absurd hb (blocks_ne_nil hw)
-        | cons H T =>
-          rw [hb] at IH
-          simp only [List.headD_cons, List.tail_cons, List.map_cons, List.sum_cons] at IH ⊢
-          rw [Qgen_cons, Int.mul_sub]
-          omega
-      · rw [blocks_cons_pos_nonpos hv hw, if_pos hv, headBlock_of_nonpos hw]
-        simp only [List.map_cons, List.sum_cons, Qgen_cons, dot_nil_right, Qgen_nil,
-          Int.sub_zero, Int.mul_zero, Int.add_zero]
-        omega
-    · have hv0 : v = 0 := by have := hx.1; omega
-      rw [blocks_cons_nonpos hv, if_neg hv, hv0]
-      omega
-
-/-- The lag-2 cross term is exactly `c * iso`: the `coef = [a,b,c]` instance of
-`crossDefect`.  This is the bridge that makes `gd_identity` a special case of
-`gd_identity_general`. -/
-theorem crossDefect_abc (a b c : Int) :
-    ∀ x : List Int, Nonneg x → crossDefect [a, b, c] x = c * iso x := by
-  intro x
-  induction x with
-  | nil => intro _; simp
-  | cons v r ih =>
-    intro hx
-    have hr : Nonneg r := nonneg_tail hx
-    rw [crossDefect_cons, iso_cons, ih hr]
-    simp only [tl_cons]
-    by_cases hv : 0 < v
-    · by_cases hw : 0 < hd r
-      · have hH : hd (headBlock r) = hd r := hd_headBlock hr
-        have hT : hd (tl (headBlock r)) = hd (tl r) := by
-          rw [headBlock_of_pos hw]; exact hd_tl_firstBlock hr hw
-        have hne : ¬ (hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r)) := by rintro ⟨h0, -, -⟩; omega
-        rw [if_pos hv, if_neg hne, dot_pair, dot_pair, hH, hT, Int.zero_add]
-        simp only [Int.sub_self, Int.mul_zero, Int.zero_add]
-      · have hge : 0 ≤ hd r := nonneg_hd hr
-        have h0 : hd r = 0 := by omega
-        rw [if_pos hv, headBlock_of_nonpos hw, dot_pair, dot_pair, h0]
-        simp only [hd_nil, tl_nil, Int.mul_zero, Int.zero_add, Int.add_zero, Int.sub_zero,
-          true_and]
-        by_cases hz : 0 < hd (tl r)
-        · rw [if_pos ⟨hv, hz⟩, mul_left_comm' v c (hd (tl r)), Int.mul_add]
-        · have hge2 : 0 ≤ hd (tl r) := nonneg_hd (nonneg_tl hr)
-          have h0' : hd (tl r) = 0 := by omega
-          have hne : ¬ (0 < v ∧ 0 < hd (tl r)) := by rintro ⟨-, h⟩; omega
-          rw [if_neg hne, h0', Int.mul_zero, Int.mul_zero, Int.zero_add, Int.zero_add]
-    · rw [if_neg hv, Int.zero_add]
-      have hne : ¬ (hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r)) := by rintro ⟨-, h, -⟩; omega
-      rw [if_neg hne, Int.zero_add]
-
-/-- `gd_identity` is the `coef = [a,b,c]` case of `gd_identity_general`. -/
-theorem gd_identity_is_specialization (a b c : Int) (x : List Int) (hx : Nonneg x) :
-    Q a b c x = ((blocks x).map (Q a b c)).sum + c * iso x := by
-  have hfun : (Q a b c) = (Qgen [a, b, c]) := funext (Q_eq_Qgen a b c)
-  rw [hfun, gd_identity_general [a, b, c] x hx, crossDefect_abc a b c x hx]
-
-end Gen
-
-/-! ## Main results -/
+/-! ### Part 0, main results -/
 
 section Main
 variable (a b c : Int)
@@ -545,10 +380,609 @@ theorem Qblocks_eq (x : List Int) :
 end Main
 
 
-/-! ## Part 2.  Norm preservation and Rayleigh transfer -/
+/-! ## Part 1.  Position-dependent coefficients
 
-section Rayleigh
+`c i L` is the coefficient of `x_i · x_{i+L}` — an arbitrary function of position *and* lag.
+Blocks become `restr`, the *position-preserving* restrictions: same length as the signal,
+equal to it on one maximal positive run, `0` elsewhere. -/
+/-! ## Part 1.  Position-dependent coefficients and position-preserving blocks -/
 
+section PosDep
+
+/-- `cdot c i L r = Σ_k c i (L+k) * r[k]`: the coefficient *row* at absolute position `i`,
+read from lag `L` onwards, paired against `r`. -/
+def cdot (c : Nat → Nat → Int) (i : Nat) : Nat → List Int → Int
+  | _, []      => 0
+  | L, v :: vs => c i L * v + cdot c i (L + 1) vs
+
+/-- The all-zero list of the same length. -/
+def zeros : List Int → List Int
+  | []     => []
+  | _ :: r => 0 :: zeros r
+
+/-- `Qfrom c i x` is the quadratic form on the window whose first entry sits at absolute
+position `i`:  `Σ_L Σ_k c (i+k) L * x_k * x_{k+L}`. -/
+def Qfrom (c : Nat → Nat → Int) : Nat → List Int → Int
+  | _, []     => 0
+  | i, v :: r => c i 0 * (v * v) + v * cdot c i 1 r + Qfrom c (i + 1) r
+
+/-- `Qf c x = Σ_L Σ_i c i L * x_i * x_{i+L}`. -/
+def Qf (c : Nat → Nat → Int) (x : List Int) : Int := Qfrom c 0 x
+
+/-- **Position-preserving block restriction.**  `restr x` lists, in order, one list per
+maximal run of strictly positive entries of `x`.  Each of them has *the same length as `x`*:
+it agrees with `x` on its own run and is `0` everywhere else.  This is what makes the
+decomposition identity survive position-dependent coefficients. -/
+def restr : List Int → List (List Int)
+  | []     => []
+  | v :: r =>
+      if 0 < v then
+        (if 0 < hd r then
+            (v :: (restr r).headD (zeros r)) :: (restr r).tail.map (fun B => (0 : Int) :: B)
+         else
+            (v :: zeros r) :: (restr r).map (fun B => (0 : Int) :: B))
+      else (restr r).map (fun B => (0 : Int) :: B)
+
+/-- The restriction to the run containing the head, or the all-zero list when the head is
+not positive. -/
+def headRestr (r : List Int) : List Int :=
+  if 0 < hd r then (restr r).headD (zeros r) else zeros r
+
+/-- `cross c i x = Σ_k x_k * (Σ_{l > k, l outside k's run} c (i+k) (l-k) * x_l)`, written as
+"all later partners minus the partners inside one's own run". -/
+def cross (c : Nat → Nat → Int) : Nat → List Int → Int
+  | _, []     => 0
+  | i, v :: r => (if 0 < v then v * (cdot c i 1 r - cdot c i 1 (headRestr r)) else 0)
+                 + cross c (i + 1) r
+
+/-- `isoW c i x = Σ_{isolated zeros k of x} c (i+k-1) 2 * x_{k-1} * x_{k+1}`. -/
+def isoW (c : Nat → Nat → Int) : Nat → List Int → Int
+  | _, []     => 0
+  | i, v :: r => (if hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r) then c i 2 * (v * hd (tl r)) else 0)
+                 + isoW c (i + 1) r
+
+/-- `Bandwidth c K`: no lag beyond `K` occurs, i.e. the matrix is `K`-banded. -/
+def Bandwidth (c : Nat → Nat → Int) (K : Nat) : Prop := ∀ i L, K < L → c i L = 0
+
+variable {c : Nat → Nat → Int} {i L : Nat} {v : Int} {r x : List Int}
+
+/-! ### `cdot`, `zeros`, `Qfrom` -/
+
+@[simp] theorem cdot_nil : cdot c i L [] = 0 := rfl
+
+theorem cdot_cons {vs : List Int} :
+    cdot c i L (v :: vs) = c i L * v + cdot c i (L + 1) vs := rfl
+
+/-- `cdot` peels one index, with no side condition. -/
+theorem cdot_eq (c : Nat → Nat → Int) (i L : Nat) (r : List Int) :
+    cdot c i L r = c i L * hd r + cdot c i (L + 1) (tl r) := by
+  cases r with
+  | nil => simp
+  | cons u s => rfl
+
+@[simp] theorem zeros_nil : zeros [] = [] := rfl
+@[simp] theorem zeros_cons : zeros (v :: r) = 0 :: zeros r := rfl
+
+@[simp] theorem hd_zeros : hd (zeros r) = 0 := by cases r <;> rfl
+@[simp] theorem tl_zeros : tl (zeros r) = zeros (tl r) := by cases r <;> rfl
+
+theorem zeros_nonneg : ∀ r : List Int, Nonneg (zeros r)
+  | []     => trivial
+  | _ :: s => ⟨by omega, zeros_nonneg s⟩
+
+@[simp] theorem cdot_zeros : ∀ (r : List Int) (L : Nat), cdot c i L (zeros r) = 0
+  | [],     _ => rfl
+  | _ :: s, L => by rw [zeros_cons, cdot_cons, cdot_zeros s (L + 1)]; simp
+
+@[simp] theorem Qfrom_nil : Qfrom c i [] = 0 := rfl
+
+theorem Qfrom_cons :
+    Qfrom c i (v :: r) = c i 0 * (v * v) + v * cdot c i 1 r + Qfrom c (i + 1) r := rfl
+
+@[simp] theorem Qfrom_cons_zero {B : List Int} : Qfrom c i (0 :: B) = Qfrom c (i + 1) B := by
+  rw [Qfrom_cons]; simp
+
+@[simp] theorem Qfrom_zeros : ∀ (r : List Int) (i : Nat), Qfrom c i (zeros r) = 0
+  | [],     _ => rfl
+  | _ :: s, i => by rw [zeros_cons, Qfrom_cons_zero, Qfrom_zeros s (i + 1)]
+
+@[simp] theorem Qf_nil : Qf c [] = 0 := rfl
+
+/-- Beyond the bandwidth the coefficient row contributes nothing. -/
+theorem cdot_of_gt {K : Nat} (h : Bandwidth c K) (i : Nat) :
+    ∀ (s : List Int) (L : Nat), K < L → cdot c i L s = 0
+  | [],     _, _  => rfl
+  | _ :: t, L, hL => by
+      rw [cdot_cons, h i L hL, cdot_of_gt h i t (L + 1) (by omega)]; simp
+
+/-- Under `Bandwidth c 2` the coefficient row has exactly two off-diagonal entries. -/
+theorem cdot_band_two (h : Bandwidth c 2) (i : Nat) (r : List Int) :
+    cdot c i 1 r = c i 1 * hd r + c i 2 * hd (tl r) := by
+  rw [cdot_eq c i 1 r, cdot_eq c i 2 (tl r), cdot_of_gt h i (tl (tl r)) 3 (by omega)]
+  omega
+
+/-- Under `Bandwidth c 1` the coefficient row has exactly one off-diagonal entry. -/
+theorem cdot_band_one (h : Bandwidth c 1) (i : Nat) (r : List Int) :
+    cdot c i 1 r = c i 1 * hd r := by
+  rw [cdot_eq c i 1 r, cdot_of_gt h i (tl r) 2 (by omega)]
+  omega
+
+/-! ### `restr` -/
+
+@[simp] theorem restr_nil : restr [] = [] := rfl
+
+@[simp] theorem cross_nil : cross c i [] = 0 := rfl
+
+theorem cross_cons :
+    cross c i (v :: r)
+      = (if 0 < v then v * (cdot c i 1 r - cdot c i 1 (headRestr r)) else 0)
+        + cross c (i + 1) r := rfl
+
+@[simp] theorem isoW_nil : isoW c i [] = 0 := rfl
+
+theorem isoW_cons :
+    isoW c i (v :: r)
+      = (if hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r) then c i 2 * (v * hd (tl r)) else 0)
+        + isoW c (i + 1) r := rfl
+
+theorem mul_left_comm' (u w z : Int) : u * (w * z) = w * (u * z) := by
+  rw [← Int.mul_assoc, Int.mul_comm u w, Int.mul_assoc]
+
+theorem restr_cons_nonpos (h : ¬ 0 < v) :
+    restr (v :: r) = (restr r).map (fun B => (0 : Int) :: B) := by simp [restr, h]
+
+theorem restr_cons_pos_pos (h : 0 < v) (h2 : 0 < hd r) :
+    restr (v :: r)
+      = (v :: (restr r).headD (zeros r)) :: (restr r).tail.map (fun B => (0 : Int) :: B) := by
+  simp [restr, h, h2]
+
+theorem restr_cons_pos_nonpos (h : 0 < v) (h2 : ¬ 0 < hd r) :
+    restr (v :: r) = (v :: zeros r) :: (restr r).map (fun B => (0 : Int) :: B) := by
+  simp [restr, h, h2]
+
+theorem restr_ne_nil (h : 0 < hd x) : restr x ≠ [] := by
+  cases x with
+  | nil => simp at h
+  | cons u s =>
+      simp only [hd_cons] at h
+      by_cases hs : 0 < hd s
+      · rw [restr_cons_pos_pos h hs]; simp
+      · rw [restr_cons_pos_nonpos h hs]; simp
+
+theorem hd_firstRestr (h : 0 < hd x) : hd ((restr x).headD (zeros x)) = hd x := by
+  cases x with
+  | nil => simp at h
+  | cons u s =>
+      simp only [hd_cons] at h
+      by_cases hs : 0 < hd s
+      · rw [restr_cons_pos_pos h hs]; simp
+      · rw [restr_cons_pos_nonpos h hs]; simp
+
+theorem headRestr_of_pos (h : 0 < hd r) : headRestr r = (restr r).headD (zeros r) := by
+  simp [headRestr, h]
+
+theorem headRestr_of_nonpos (h : ¬ 0 < hd r) : headRestr r = zeros r := by
+  simp [headRestr, h]
+
+/-- The restriction to the head's run starts at the head itself — including the degenerate
+case `x_i = 0`, where both sides are `0`. -/
+theorem hd_headRestr (hr : Nonneg r) : hd (headRestr r) = hd r := by
+  by_cases h : 0 < hd r
+  · rw [headRestr_of_pos h]; exact hd_firstRestr h
+  · have hge : 0 ≤ hd r := nonneg_hd hr
+    have h0 : hd r = 0 := by omega
+    rw [headRestr_of_nonpos h, h0]; simp
+
+theorem hd_tl_headRestr (hr : Nonneg r) (h : 0 < hd r) :
+    hd (tl (headRestr r)) = hd (tl r) := by
+  rw [headRestr_of_pos h]
+  cases r with
+  | nil => simp at h
+  | cons u s =>
+      simp only [hd_cons] at h
+      by_cases hs : 0 < hd s
+      · rw [restr_cons_pos_pos h hs]
+        simpa using hd_firstRestr hs
+      · rw [restr_cons_pos_nonpos h hs]
+        have hge : 0 ≤ hd s := nonneg_hd (nonneg_tail hr)
+        have h0 : hd s = 0 := by omega
+        simp [h0]
+
+/-- **Adjacent positive marks share a run.**  Positions `0` and `1` of the restriction to
+the head's run carry `x_0` and `x_1` themselves. -/
+theorem adjacent_same_restr (hv : 0 < v) (hw : 0 < hd r) :
+    (restr (v :: r)).headD (zeros (v :: r)) = v :: headRestr r ∧ hd (headRestr r) = hd r := by
+  refine ⟨?_, by rw [headRestr_of_pos hw]; exact hd_firstRestr hw⟩
+  rw [restr_cons_pos_pos hv hw, headRestr_of_pos hw]
+  simp
+
+end PosDep
+
+section PosDepMain
+
+variable {c : Nat → Nat → Int} {i : Nat} {v : Int} {r x : List Int}
+
+theorem sum_map_cons_zero (c : Nat → Nat → Int) (i : Nat) :
+    ∀ L : List (List Int),
+      ((L.map (fun B => (0 : Int) :: B)).map (Qfrom c i)).sum
+        = (L.map (Qfrom c (i + 1))).sum
+  | []      => rfl
+  | B :: T  => by
+      simp only [List.map_cons, List.sum_cons, Qfrom_cons_zero]
+      rw [sum_map_cons_zero c i T]
+
+/-- **Theorem 2.1 (block decomposition, position-dependent).**  On a nonnegative signal the
+form splits exactly into the sum of its *position-preserving* block restrictions plus the
+cross-block coupling.  The coefficients `c i L` are arbitrary functions of *both* the
+position `i` and the lag `L`; no Toeplitz structure is assumed. -/
+theorem gd_identity_posdep (c : Nat → Nat → Int) :
+    ∀ x : List Int, Nonneg x → ∀ i : Nat,
+      Qfrom c i x = ((restr x).map (Qfrom c i)).sum + cross c i x := by
+  intro x
+  induction x with
+  | nil => intro _ _; simp [cross]
+  | cons v r ih =>
+    intro hx i
+    have hr : Nonneg r := nonneg_tail hx
+    have IH := ih hr (i + 1)
+    rw [Qfrom_cons, cross_cons]
+    by_cases hv : 0 < v
+    · by_cases hw : 0 < hd r
+      · rw [restr_cons_pos_pos hv hw, if_pos hv, headRestr_of_pos hw]
+        cases hb : restr r with
+        | nil => exact absurd hb (restr_ne_nil hw)
+        | cons H T =>
+          rw [hb] at IH
+          simp only [List.headD_cons, List.tail_cons, List.map_cons, List.sum_cons] at IH ⊢
+          rw [Qfrom_cons, sum_map_cons_zero c i T, Int.mul_sub]
+          omega
+      · rw [restr_cons_pos_nonpos hv hw, if_pos hv, headRestr_of_nonpos hw]
+        simp only [List.map_cons, List.sum_cons]
+        rw [Qfrom_cons, sum_map_cons_zero c i (restr r), cdot_zeros, Qfrom_zeros,
+          Int.sub_zero]
+        omega
+    · have hv0 : v = 0 := by have := hx.1; omega
+      rw [restr_cons_nonpos hv, if_neg hv, hv0, sum_map_cons_zero c i (restr r)]
+      simp only [Int.zero_mul, Int.mul_zero, Int.zero_add, Int.add_zero]
+      omega
+
+/-- The `i = 0` form: `Q(x) - Σ_r Q(x^(r)) = cross(x)`. -/
+theorem gd_identity_posdep' (c : Nat → Nat → Int) (x : List Int) (hx : Nonneg x) :
+    Qf c x = ((restr x).map (Qf c)).sum + cross c 0 x :=
+  gd_identity_posdep c x hx 0
+
+/-- **Theorem 2.2 (straddling pairs have lag ≥ 2).**  The lag-1 coefficient cancels
+identically out of `cross`; hence a bandwidth-1 matrix has no cross-block coupling at all. -/
+theorem straddle_lag_ge_two (c : Nat → Nat → Int) (i : Nat) (hr : Nonneg r) :
+    cdot c i 1 r - cdot c i 1 (headRestr r)
+      = cdot c i 2 (tl r) - cdot c i 2 (tl (headRestr r)) := by
+  rw [cdot_eq c i 1 r, cdot_eq c i 1 (headRestr r), hd_headRestr hr,
+    show (1 : Nat) + 1 = 2 from rfl]
+  omega
+
+/-- **Theorem 2.2, corollary.**  `K ≤ 1` ⟹ `cross ≡ 0`. -/
+theorem cross_eq_zero_of_band_one (h : Bandwidth c 1) :
+    ∀ x : List Int, Nonneg x → ∀ i : Nat, cross c i x = 0 := by
+  intro x
+  induction x with
+  | nil => intro _ _; rfl
+  | cons v r ih =>
+    intro hx i
+    have hr : Nonneg r := nonneg_tail hx
+    rw [cross_cons, ih hr (i + 1),
+        cdot_band_one h i r, cdot_band_one h i (headRestr r), hd_headRestr hr]
+    simp
+
+/-- **Corollary 2.1.**  For a bandwidth-2 matrix the cross term is exactly the
+isolated-zero coupling, weighted at each isolated zero `k` by its own coefficient
+`c (k-1) 2`. -/
+theorem cross_eq_isoW (h : Bandwidth c 2) :
+    ∀ x : List Int, Nonneg x → ∀ i : Nat, cross c i x = isoW c i x := by
+  intro x
+  induction x with
+  | nil => intro _ _; rfl
+  | cons v r ih =>
+    intro hx i
+    have hr : Nonneg r := nonneg_tail hx
+    rw [cross_cons,
+        isoW_cons,
+        ih hr (i + 1)]
+    by_cases hv : 0 < v
+    · by_cases hw : 0 < hd r
+      · have hH : hd (headRestr r) = hd r := hd_headRestr hr
+        have hT : hd (tl (headRestr r)) = hd (tl r) := hd_tl_headRestr hr hw
+        have hne : ¬ (hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r)) := by rintro ⟨h0, -, -⟩; omega
+        rw [if_pos hv, if_neg hne, cdot_band_two h i r, cdot_band_two h i (headRestr r),
+          hH, hT]
+        simp
+      · have hge : 0 ≤ hd r := nonneg_hd hr
+        have h0 : hd r = 0 := by omega
+        rw [if_pos hv, headRestr_of_nonpos hw, cdot_band_two h i r,
+          cdot_band_two h i (zeros r), hd_zeros, tl_zeros, hd_zeros, h0]
+        simp only [Int.mul_zero, Int.zero_add, Int.add_zero, Int.sub_zero, true_and]
+        by_cases hz : 0 < hd (tl r)
+        · rw [if_pos ⟨hv, hz⟩, mul_left_comm' v (c i 2) (hd (tl r))]
+        · have hge2 : 0 ≤ hd (tl r) := nonneg_hd (nonneg_tl hr)
+          have h0' : hd (tl r) = 0 := by omega
+          have hne : ¬ (0 < v ∧ 0 < hd (tl r)) := by rintro ⟨-, hcon⟩; omega
+          rw [if_neg hne, h0']
+          simp
+    · rw [if_neg hv]
+      have hne : ¬ (hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r)) := by rintro ⟨-, hcon, -⟩; omega
+      rw [if_neg hne]
+
+/-- **Corollary 2.1, in the shape used later.** -/
+theorem gd_identity_band_two (h : Bandwidth c 2) (x : List Int) (hx : Nonneg x) :
+    Qf c x = ((restr x).map (Qf c)).sum + isoW c 0 x := by
+  rw [gd_identity_posdep' c x hx, cross_eq_isoW h x hx 0]
+
+end PosDepMain
+
+section IsoWeight
+
+variable {c : Nat → Nat → Int}
+
+theorem iso_nonneg : ∀ x : List Int, Nonneg x → 0 ≤ iso x := by
+  intro x
+  induction x with
+  | nil => intro _; simp
+  | cons v r ih =>
+    intro hx
+    have := ih (nonneg_tail hx)
+    rw [iso_cons]
+    by_cases h : hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r)
+    · rw [if_pos h]
+      have : 0 < v * hd (tl r) := Int.mul_pos h.2.1 h.2.2
+      omega
+    · rw [if_neg h]; omega
+
+theorem isoW_nonneg (hc2 : ∀ i, 0 < c i 2) :
+    ∀ x : List Int, Nonneg x → ∀ i : Nat, 0 ≤ isoW c i x := by
+  intro x
+  induction x with
+  | nil => intro _ _; exact Int.le_refl 0
+  | cons v r ih =>
+    intro hx i
+    have IH := ih (nonneg_tail hx) (i + 1)
+    rw [isoW_cons]
+    by_cases h : hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r)
+    · rw [if_pos h]
+      have : 0 < c i 2 * (v * hd (tl r)) := Int.mul_pos (hc2 i) (Int.mul_pos h.2.1 h.2.2)
+      omega
+    · rw [if_neg h]; omega
+
+theorem isoW_pos (hc2 : ∀ i, 0 < c i 2) :
+    ∀ x : List Int, Nonneg x → ∀ i : Nat, 0 < iso x → 0 < isoW c i x := by
+  intro x
+  induction x with
+  | nil => intro _ _ h; simp at h
+  | cons v r ih =>
+    intro hx i hpos
+    have hr : Nonneg r := nonneg_tail hx
+    have IHnn : 0 ≤ isoW c (i + 1) r := isoW_nonneg hc2 r hr (i + 1)
+    rw [isoW_cons]
+    by_cases h : hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r)
+    · rw [if_pos h]
+      have : 0 < c i 2 * (v * hd (tl r)) := Int.mul_pos (hc2 i) (Int.mul_pos h.2.1 h.2.2)
+      omega
+    · rw [if_neg h, Int.zero_add]
+      rw [iso_cons, if_neg h, Int.zero_add] at hpos
+      exact ih hr (i + 1) hpos
+
+theorem isoW_eq_zero_of_iso_eq_zero :
+    ∀ x : List Int, Nonneg x → ∀ i : Nat, iso x = 0 → isoW c i x = 0 := by
+  intro x
+  induction x with
+  | nil => intro _ _ _; rfl
+  | cons v r ih =>
+    intro hx i h0
+    have hr : Nonneg r := nonneg_tail hx
+    have hnn : 0 ≤ iso r := iso_nonneg r hr
+    rw [iso_cons] at h0
+    have hcond : ¬ (hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r)) := by
+      intro h
+      rw [if_pos h] at h0
+      have : 0 < v * hd (tl r) := Int.mul_pos h.2.1 h.2.2
+      omega
+    rw [if_neg hcond, Int.zero_add] at h0
+    rw [isoW_cons, if_neg hcond, Int.zero_add, ih hr (i + 1) h0]
+
+end IsoWeight
+
+/-! ## Part 2.  The Toeplitz specialisation
+
+Part 0's lag-2 form is the `c i L = (a, b, c, 0, 0, …)` instance of `Qf`, uniformly in the
+position `i`.  Everything in Part 0 is therefore a corollary of Part 1 — and, because the
+coefficients no longer see the position, extraction and masking give the *same* value. -/
+
+section Toeplitz
+
+/-- The Toeplitz (diagonal-constant) coefficient function of Part 0. -/
+def toep (a b c : Int) : Nat → Nat → Int :=
+  fun _ L => if L = 0 then a else if L = 1 then b else if L = 2 then c else 0
+
+variable (a b c : Int)
+
+@[simp] theorem toep_zero (i : Nat) : toep a b c i 0 = a := by simp [toep]
+@[simp] theorem toep_one (i : Nat) : toep a b c i 1 = b := by simp [toep]
+@[simp] theorem toep_two (i : Nat) : toep a b c i 2 = c := by simp [toep]
+
+theorem toep_band : Bandwidth (toep a b c) 2 := by
+  intro i L h
+  simp only [toep]
+  rw [if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+
+/-- `Qf (toep a b c)` is Part 0's `Q a b c`, from every starting position. -/
+theorem Qfrom_toep : ∀ (x : List Int) (i : Nat), Qfrom (toep a b c) i x = Q a b c x := by
+  intro x
+  induction x with
+  | nil => intro _; rfl
+  | cons v r ih =>
+    intro i
+    rw [Qfrom_cons, ih (i + 1), cdot_band_two (toep_band a b c) i r, Q_cons,
+      toep_zero, toep_one, toep_two, Int.mul_add,
+      mul_left_comm' v b (hd r), mul_left_comm' v c (hd (tl r))]
+    omega
+
+theorem Qf_toep (x : List Int) : Qf (toep a b c) x = Q a b c x := Qfrom_toep a b c x 0
+
+/-- With Toeplitz coefficients the position-weighted isolated-zero sum collapses to `c · iso`. -/
+theorem isoW_toep : ∀ (x : List Int) (i : Nat), isoW (toep a b c) i x = c * iso x := by
+  intro x
+  induction x with
+  | nil => intro _; simp
+  | cons v r ih =>
+    intro i
+    rw [isoW_cons,
+      ih (i + 1), iso_cons, Int.mul_add, toep_two]
+    by_cases h : hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r)
+    · rw [if_pos h, if_pos h]
+    · rw [if_neg h, if_neg h]; simp
+
+/-- Part 0's identity in position-preserving form, obtained from `cross_eq_isoW`. -/
+theorem gd_identity_restr (x : List Int) (hx : Nonneg x) :
+    Q a b c x = ((restr x).map (Q a b c)).sum + c * iso x := by
+  have hfun : Qf (toep a b c) = Q a b c := funext (Qf_toep a b c)
+  have h := gd_identity_band_two (toep_band a b c) x hx
+  rw [isoW_toep a b c x 0, hfun] at h
+  exact h
+
+/-- **Extraction and masking agree exactly when the coefficients are Toeplitz.**  This is
+the precise sense in which Part 0 is safe and the general case is not: subtracting the two
+identities, the `c · iso` terms cancel and the two block sums must coincide.  For a
+position-dependent `c` they do not — see `extraction_breaks_position_dependence`. -/
+theorem Qblocks_eq_Qrestr (x : List Int) (hx : Nonneg x) :
+    Qblocks a b c x = ((restr x).map (Q a b c)).sum := by
+  have h1 := gd_identity a b c x hx
+  have h2 := gd_identity_restr a b c x hx
+  omega
+
+end Toeplitz
+
+/-! ## Part 3.  Masking and support -/
+
+section Masking
+
+/-- `Masked w u`: `w` is `u` with some entries replaced by `0` (same length, same order).
+This is "`supp w ⊆ supp u` and `w` agrees with `u` on `supp w`". -/
+def Masked : List Int → List Int → Prop
+  | [],      []      => True
+  | [],      _ :: _  => False
+  | _ :: _,  []      => False
+  | w :: ws, v :: vs => (w = v ∨ w = 0) ∧ Masked ws vs
+
+@[simp] theorem Masked_nil_nil : Masked [] [] := trivial
+
+theorem Masked_cons {w v : Int} {ws vs : List Int} :
+    Masked (w :: ws) (v :: vs) ↔ ((w = v ∨ w = 0) ∧ Masked ws vs) := Iff.rfl
+
+theorem Masked_zeros : ∀ r : List Int, Masked (zeros r) r
+  | []     => trivial
+  | _ :: s => ⟨Or.inr rfl, Masked_zeros s⟩
+
+theorem Masked_refl : ∀ r : List Int, Masked r r
+  | []     => trivial
+  | _ :: s => ⟨Or.inl rfl, Masked_refl s⟩
+
+theorem Masked_nonneg : ∀ {w u : List Int}, Masked w u → Nonneg u → Nonneg w
+  | [],      [],      _, _  => trivial
+  | _ :: _,  [],      h, _  => absurd h (by simp [Masked])
+  | [],      _ :: _,  h, _  => absurd h (by simp [Masked])
+  | w :: ws, v :: vs, h, hu =>
+      ⟨by have := hu.1; rcases h.1 with hh | hh <;> omega,
+       Masked_nonneg h.2 hu.2⟩
+
+/-- Every block restriction is a masking of the original signal. -/
+theorem restr_masked : ∀ {x : List Int}, ∀ B ∈ restr x, Masked B x := by
+  intro x
+  induction x with
+  | nil => intro B hB; simp at hB
+  | cons v r ih =>
+    intro B hB
+    have hmap : ∀ (L : List (List Int)), (∀ C ∈ L, Masked C r) →
+        ∀ C ∈ L.map (fun B => (0 : Int) :: B), Masked C (v :: r) := by
+      intro L hL C hC
+      rcases List.mem_map.1 hC with ⟨C', hC', rfl⟩
+      exact ⟨Or.inr rfl, hL C' hC'⟩
+    by_cases hv : 0 < v
+    · by_cases hw : 0 < hd r
+      · rw [restr_cons_pos_pos hv hw] at hB
+        cases hb : restr r with
+        | nil => exact absurd hb (restr_ne_nil hw)
+        | cons H T =>
+          rw [hb] at hB
+          simp only [List.headD_cons, List.tail_cons, List.mem_cons] at hB
+          rcases hB with rfl | hB
+          · exact ⟨Or.inl rfl, ih H (by rw [hb]; exact List.mem_cons_self ..)⟩
+          · exact hmap T (fun C hC => ih C (by rw [hb]; exact List.mem_cons_of_mem _ hC)) B hB
+      · rw [restr_cons_pos_nonpos hv hw] at hB
+        rcases List.mem_cons.1 hB with rfl | hB
+        · exact ⟨Or.inl rfl, Masked_zeros r⟩
+        · exact hmap (restr r) (fun C hC => ih C hC) B hB
+    · rw [restr_cons_nonpos hv] at hB
+      exact hmap (restr r) (fun C hC => ih C hC) B hB
+
+theorem restr_nonneg {x : List Int} (hx : Nonneg x) : ∀ B ∈ restr x, Nonneg B :=
+  fun B hB => Masked_nonneg (restr_masked B hB) hx
+
+/-- Every block restriction carries at least one strictly positive mark. -/
+theorem restr_mem_pos : ∀ {x : List Int}, ∀ B ∈ restr x, ∃ u ∈ B, 0 < u := by
+  intro x
+  induction x with
+  | nil => intro B hB; simp at hB
+  | cons v r ih =>
+    intro B hB
+    have hmap : ∀ (L : List (List Int)), (∀ C ∈ L, ∃ u ∈ C, 0 < u) →
+        ∀ C ∈ L.map (fun B => (0 : Int) :: B), ∃ u ∈ C, 0 < u := by
+      intro L hL C hC
+      rcases List.mem_map.1 hC with ⟨C', hC', rfl⟩
+      rcases hL C' hC' with ⟨u, hu, hup⟩
+      exact ⟨u, List.mem_cons_of_mem _ hu, hup⟩
+    by_cases hv : 0 < v
+    · by_cases hw : 0 < hd r
+      · rw [restr_cons_pos_pos hv hw] at hB
+        cases hb : restr r with
+        | nil => exact absurd hb (restr_ne_nil hw)
+        | cons H T =>
+          rw [hb] at hB
+          simp only [List.headD_cons, List.tail_cons, List.mem_cons] at hB
+          rcases hB with rfl | hB
+          · exact ⟨v, List.mem_cons_self .., hv⟩
+          · exact hmap T (fun C hC => ih C (by rw [hb]; exact List.mem_cons_of_mem _ hC)) B hB
+      · rw [restr_cons_pos_nonpos hv hw] at hB
+        rcases List.mem_cons.1 hB with rfl | hB
+        · exact ⟨v, List.mem_cons_self .., hv⟩
+        · exact hmap (restr r) (fun C hC => ih C hC) B hB
+    · rw [restr_cons_nonpos hv] at hB
+      exact hmap (restr r) (fun C hC => ih C hC) B hB
+
+
+
+/-- Boolean form of `Masked`, for the executable checks. -/
+def maskedB : List Int → List Int → Bool
+  | [],      []      => true
+  | [],      _ :: _  => false
+  | _ :: _,  []      => false
+  | w :: ws, v :: vs => ((w == v) || (w == 0)) && maskedB ws vs
+
+theorem masked_iff : ∀ w u : List Int, Masked w u ↔ maskedB w u = true
+  | [],      []      => Iff.intro (fun _ => rfl) (fun _ => trivial)
+  | [],      _ :: _  => Iff.intro (fun h => False.elim h) (fun h => Bool.noConfusion h)
+  | _ :: _,  []      => Iff.intro (fun h => False.elim h) (fun h => Bool.noConfusion h)
+  | w :: ws, v :: vs => by
+      rw [Masked_cons, masked_iff ws vs]
+      simp [maskedB]
+
+end Masking
+
+/-! ## Part 4.  Denominators and Rayleigh transfer
+
+`D d x = Σ_i d (x_i)`.  The preservation law never touches the shape of `d`: entries outside
+every block are exactly `0` under `Nonneg`, so they contribute `d 0 = 0` to both sides.
+Positivity of `d` enters only in the transfer, to know each block has a strictly positive
+denominator. -/
+
+section Denom
 /-- `sqnorm x = Σ_i x_i²`. -/
 def sqnorm : List Int → Int
   | []     => 0
@@ -558,56 +992,26 @@ def sqnorm : List Int → Int
 
 theorem sqnorm_cons {v : Int} {r : List Int} : sqnorm (v :: r) = v * v + sqnorm r := rfl
 
-/-- **Blocking preserves the squared norm.**  Entries outside every block are `0`, so they
-contribute nothing to `Σ x_i²`. -/
-theorem blocks_sqnorm_preserved :
-    ∀ x : List Int, Nonneg x → ((blocks x).map sqnorm).sum = sqnorm x := by
+/-- `D d x = Σ_i d (x_i)`. -/
+def D (d : Int → Int) (x : List Int) : Int := (x.map d).sum
+
+@[simp] theorem D_nil {d : Int → Int} : D d [] = 0 := rfl
+
+theorem D_cons {d : Int → Int} {v : Int} {r : List Int} : D d (v :: r) = d v + D d r := by
+  simp [D]
+
+theorem sqnorm_eq_D : ∀ x : List Int, sqnorm x = D (fun t => t * t) x := by
   intro x
   induction x with
-  | nil => intro _; simp
-  | cons v r ih =>
-    intro hx
-    have hr : Nonneg r := nonneg_tail hx
-    have IH := ih hr
-    by_cases hv : 0 < v
-    · by_cases hw : 0 < hd r
-      · rw [blocks_cons_pos_pos hv hw]
-        cases hb : blocks r with
-        | nil => exact absurd hb (blocks_ne_nil hw)
-        | cons H T =>
-          rw [hb] at IH
-          simp only [List.headD_cons, List.tail_cons, List.map_cons, List.sum_cons] at IH ⊢
-          rw [sqnorm_cons, sqnorm_cons]
-          omega
-      · rw [blocks_cons_pos_nonpos hv hw]
-        simp only [List.map_cons, List.sum_cons, sqnorm_cons, sqnorm_nil, Int.add_zero]
-        omega
-    · have hv0 : v = 0 := by have := hx.1; omega
-      rw [blocks_cons_nonpos hv, sqnorm_cons, hv0]
-      omega
+  | nil => rfl
+  | cons v r ih => rw [sqnorm_cons, D_cons, ih]
 
-theorem sqnorm_nonneg_of_pos :
-    ∀ {B : List Int}, (∀ u ∈ B, 0 < u) → 0 ≤ sqnorm B := by
-  intro B
-  induction B with
-  | nil => intro _; simp
-  | cons u t ih =>
-    intro h
-    have hu : 0 < u := h u (List.mem_cons_self ..)
-    have huu : 0 < u * u := Int.mul_pos hu hu
-    have := ih (fun w hw => h w (List.mem_cons_of_mem _ hw))
-    rw [sqnorm_cons]
-    omega
+theorem D_id_eq_sum : ∀ x : List Int, D id x = x.sum := by
+  intro x
+  induction x with
+  | nil => rfl
+  | cons v r ih => rw [D_cons, ih]; simp
 
-theorem sqnorm_pos {B : List Int} (h : ∀ u ∈ B, 0 < u) (hne : B ≠ []) : 0 < sqnorm B := by
-  cases B with
-  | nil => exact absurd rfl hne
-  | cons u t =>
-    have hu : 0 < u := h u (List.mem_cons_self ..)
-    have huu : 0 < u * u := Int.mul_pos hu hu
-    have := sqnorm_nonneg_of_pos (fun w hw => h w (List.mem_cons_of_mem _ hw))
-    rw [sqnorm_cons]
-    omega
 
 /-- No block is empty. -/
 theorem blocks_mem_ne_nil : ∀ {x : List Int}, ∀ B ∈ blocks x, B ≠ [] := by
@@ -634,9 +1038,40 @@ theorem blocks_mem_ne_nil : ∀ {x : List Int}, ∀ B ∈ blocks x, B ≠ [] := 
     · rw [blocks_cons_nonpos hv] at hB
       exact ih B hB
 
-theorem blocks_sqnorm_pos {x : List Int} : ∀ B ∈ blocks x, 0 < sqnorm B := by
-  intro B hB
-  exact sqnorm_pos (fun u hu => blocks_pos B hB u hu) (blocks_mem_ne_nil B hB)
+/-- **Generalised denominator preservation.**  Only `d 0 = 0` is assumed. -/
+theorem blocks_D_preserved (d : Int → Int) (hd0 : d 0 = 0) :
+    ∀ x : List Int, Nonneg x → ((blocks x).map (D d)).sum = D d x := by
+  intro x
+  induction x with
+  | nil => intro _; simp
+  | cons v r ih =>
+    intro hx
+    have hr : Nonneg r := nonneg_tail hx
+    have IH := ih hr
+    by_cases hv : 0 < v
+    · by_cases hw : 0 < hd r
+      · rw [blocks_cons_pos_pos hv hw]
+        cases hb : blocks r with
+        | nil => exact absurd hb (blocks_ne_nil hw)
+        | cons H T =>
+          rw [hb] at IH
+          simp only [List.headD_cons, List.tail_cons, List.map_cons, List.sum_cons] at IH ⊢
+          rw [D_cons, D_cons]
+          omega
+      · rw [blocks_cons_pos_nonpos hv hw]
+        simp only [List.map_cons, List.sum_cons, D_cons, D_nil, Int.add_zero]
+        omega
+    · have hv0 : v = 0 := by have := hx.1; omega
+      rw [blocks_cons_nonpos hv, D_cons, hv0, hd0]
+      omega
+
+/-- **Blocking preserves the squared norm** — the `d = (· * ·)` instance of
+`blocks_D_preserved`. -/
+theorem blocks_sqnorm_preserved (x : List Int) (hx : Nonneg x) :
+    ((blocks x).map sqnorm).sum = sqnorm x := by
+  have hfun : sqnorm = D (fun t => t * t) := funext sqnorm_eq_D
+  rw [hfun]
+  exact blocks_D_preserved (fun t => t * t) (by simp) x hx
 
 /-- Cross-multiplied mediant step: if every member satisfies `T * g u ≤ f u * S`, so does
 the pair of sums.  Contrapositive of "some member beats the average". -/
@@ -674,56 +1109,58 @@ theorem mul_lt_mul_right' {p q S : Int} (h : p < q) (hS : 0 < S) : p * S < q * S
   have hpos : 0 < (q - p) * S := Int.mul_pos (by omega) hS
   rw [Int.sub_mul] at hpos
   omega
+end Denom
 
-/-- **Rayleigh transfer.**  If the isolated-zero coupling is active with `c > 0`, then some
-block has a strictly smaller Rayleigh quotient than the whole signal.  Stated by cross
-multiplication, so everything stays in `Int`. -/
-theorem rayleigh_transfer (a b c : Int) {x : List Int}
-    (hx : Nonneg x) (hc : 0 < c) (hiso : 0 < iso x) (hS : 0 < sqnorm x) :
-    ∃ B ∈ blocks x, 0 < sqnorm B ∧
-      Q a b c B * sqnorm x < Q a b c x * sqnorm B := by
-  rcases list_forall_or_exists
-      (fun B => 0 < sqnorm B ∧ Q a b c B * sqnorm x < Q a b c x * sqnorm B)
-      (blocks x) with hall | hex
-  · exfalso
-    have hle : ∀ B ∈ blocks x, Q a b c x * sqnorm B ≤ Q a b c B * sqnorm x := by
-      intro B hB
-      have hpos : 0 < sqnorm B := blocks_sqnorm_pos B hB
-      have hnn : ¬ (Q a b c B * sqnorm x < Q a b c x * sqnorm B) :=
-        fun hlt => hall B hB ⟨hpos, hlt⟩
-      omega
-    have hsum := sum_mul_le (Q a b c) sqnorm (sqnorm x) (Q a b c x) (blocks x) hle
-    rw [blocks_sqnorm_preserved x hx] at hsum
-    have hlt : ((blocks x).map (Q a b c)).sum < Q a b c x :=
-      isolated_zero_strict a b c hx hc hiso
-    have hmul := mul_lt_mul_right' hlt hS
+section RestrDenom
+
+/-- Sum of a mapped list is `≥ 0` as soon as every term is. -/
+theorem sum_map_nonneg {α : Type _} (f : α → Int) :
+    ∀ l : List α, (∀ u ∈ l, 0 ≤ f u) → 0 ≤ (l.map f).sum := by
+  intro l
+  induction l with
+  | nil => intro _; simp
+  | cons u t ih =>
+    intro h
+    have := ih (fun w hw => h w (List.mem_cons_of_mem _ hw))
+    have := h u (List.mem_cons_self ..)
+    simp only [List.map_cons, List.sum_cons]
     omega
-  · exact hex
 
-end Rayleigh
+/-- A sum of nonnegative terms vanishes only if every term does. -/
+theorem sum_map_eq_zero {α : Type _} (f : α → Int) :
+    ∀ l : List α, (∀ u ∈ l, 0 ≤ f u) → (l.map f).sum = 0 → ∀ u ∈ l, f u = 0 := by
+  intro l
+  induction l with
+  | nil => intro _ _ u hu; simp at hu
+  | cons u t ih =>
+    intro h hsum w hw
+    have hnn := sum_map_nonneg f t (fun z hz => h z (List.mem_cons_of_mem _ hz))
+    have hu := h u (List.mem_cons_self ..)
+    simp only [List.map_cons, List.sum_cons] at hsum
+    have hu0 : f u = 0 := by omega
+    have ht0 : (t.map f).sum = 0 := by omega
+    rcases List.mem_cons.1 hw with rfl | hw
+    · exact hu0
+    · exact ih (fun z hz => h z (List.mem_cons_of_mem _ hz)) ht0 w hw
 
+variable {d : Int → Int}
 
-/-! ## Part 3.  An arbitrary pointwise denominator
+@[simp] theorem D_zeros (hd0 : d 0 = 0) : ∀ r : List Int, D d (zeros r) = 0
+  | []     => rfl
+  | _ :: s => by rw [zeros_cons, D_cons, hd0, D_zeros hd0 s]; simp
 
-`blocks_sqnorm_preserved` never uses that the summand is a square: the whole argument is
-"entries outside every block are `0`, and they contribute `0` to both sides".  So it
-generalises to any pointwise `d : Int → Int` with `d 0 = 0` — **no positivity of `d` is
-needed for the preservation law**.  Positivity is only needed later, to know that each block
-has a strictly positive denominator. -/
+theorem sum_map_D_cons_zero (hd0 : d 0 = 0) :
+    ∀ L : List (List Int),
+      ((L.map (fun B => (0 : Int) :: B)).map (D d)).sum = (L.map (D d)).sum
+  | []     => rfl
+  | B :: T => by
+      simp only [List.map_cons, List.sum_cons, D_cons, hd0, Int.zero_add]
+      rw [sum_map_D_cons_zero hd0 T]
 
-section GenDenom
-
-/-- `D d x = Σ_i d (x_i)`. -/
-def D (d : Int → Int) (x : List Int) : Int := (x.map d).sum
-
-@[simp] theorem D_nil {d : Int → Int} : D d [] = 0 := rfl
-
-theorem D_cons {d : Int → Int} {v : Int} {r : List Int} : D d (v :: r) = d v + D d r := by
-  simp [D]
-
-/-- **Generalised denominator preservation.**  Only `d 0 = 0` is assumed. -/
-theorem blocks_D_preserved (d : Int → Int) (hd0 : d 0 = 0) :
-    ∀ x : List Int, Nonneg x → ((blocks x).map (D d)).sum = D d x := by
+/-- **Lemma 4.1 (denominator preservation).**  Only `d 0 = 0` is assumed — no positivity.
+The position-preserving restrictions pad with zeros, and `d 0 = 0` makes the padding free. -/
+theorem restr_D_preserved (d : Int → Int) (hd0 : d 0 = 0) :
+    ∀ x : List Int, Nonneg x → ((restr x).map (D d)).sum = D d x := by
   intro x
   induction x with
   | nil => intro _; simp
@@ -733,116 +1170,254 @@ theorem blocks_D_preserved (d : Int → Int) (hd0 : d 0 = 0) :
     have IH := ih hr
     by_cases hv : 0 < v
     · by_cases hw : 0 < hd r
-      · rw [blocks_cons_pos_pos hv hw]
-        cases hb : blocks r with
-        | nil => exact absurd hb (blocks_ne_nil hw)
+      · rw [restr_cons_pos_pos hv hw]
+        cases hb : restr r with
+        | nil => exact absurd hb (restr_ne_nil hw)
         | cons H T =>
           rw [hb] at IH
           simp only [List.headD_cons, List.tail_cons, List.map_cons, List.sum_cons] at IH ⊢
-          rw [D_cons, D_cons]
+          rw [D_cons, D_cons, sum_map_D_cons_zero hd0 T]
           omega
-      · rw [blocks_cons_pos_nonpos hv hw]
-        simp only [List.map_cons, List.sum_cons, D_cons, D_nil, Int.add_zero]
+      · rw [restr_cons_pos_nonpos hv hw]
+        simp only [List.map_cons, List.sum_cons]
+        rw [D_cons, D_cons, D_zeros hd0, sum_map_D_cons_zero hd0 (restr r)]
         omega
     · have hv0 : v = 0 := by have := hx.1; omega
-      rw [blocks_cons_nonpos hv, D_cons, hv0, hd0]
-      omega
+      rw [restr_cons_nonpos hv, D_cons, hv0, hd0,
+        sum_map_D_cons_zero hd0 (restr r), Int.zero_add]
+      exact IH
 
-theorem sqnorm_eq_D : ∀ x : List Int, sqnorm x = D (fun t => t * t) x := by
-  intro x
-  induction x with
-  | nil => rfl
-  | cons v r ih => rw [sqnorm_cons, D_cons, ih]
-
-/-- `blocks_sqnorm_preserved` is the `d = (· * ·)` instance of `blocks_D_preserved`. -/
-theorem blocks_sqnorm_preserved_from_D (x : List Int) (hx : Nonneg x) :
-    ((blocks x).map sqnorm).sum = sqnorm x := by
-  have hfun : sqnorm = D (fun t => t * t) := funext sqnorm_eq_D
-  rw [hfun]
-  exact blocks_D_preserved (fun t => t * t) (by simp) x hx
-
-theorem D_nonneg_of_pos {d : Int → Int} (hdpos : ∀ t, 0 < t → 0 < d t) :
-    ∀ {B : List Int}, (∀ u ∈ B, 0 < u) → 0 ≤ D d B := by
+theorem D_nonneg_of_nonneg (hd0 : d 0 = 0) (hdpos : ∀ t, 0 < t → 0 < d t) :
+    ∀ {B : List Int}, Nonneg B → 0 ≤ D d B := by
   intro B
   induction B with
   | nil => intro _; simp
   | cons u t ih =>
     intro h
-    have hu : 0 < d u := hdpos u (h u (List.mem_cons_self ..))
-    have := ih (fun w hw => h w (List.mem_cons_of_mem _ hw))
+    have htail := ih h.2
     rw [D_cons]
-    omega
+    by_cases hu : 0 < u
+    · have := hdpos u hu; omega
+    · have : u = 0 := by have := h.1; omega
+      rw [this, hd0]; omega
 
-theorem D_pos {d : Int → Int} (hdpos : ∀ t, 0 < t → 0 < d t) {B : List Int}
-    (h : ∀ u ∈ B, 0 < u) (hne : B ≠ []) : 0 < D d B := by
-  cases B with
-  | nil => exact absurd rfl hne
-  | cons u t =>
-    have hu : 0 < d u := hdpos u (h u (List.mem_cons_self ..))
-    have := D_nonneg_of_pos hdpos (fun w hw => h w (List.mem_cons_of_mem _ hw))
+theorem D_pos_of_mem_pos (hd0 : d 0 = 0) (hdpos : ∀ t, 0 < t → 0 < d t) :
+    ∀ {B : List Int}, Nonneg B → (∃ u ∈ B, 0 < u) → 0 < D d B := by
+  intro B
+  induction B with
+  | nil => intro _ h; rcases h with ⟨u, hu, -⟩; cases hu
+  | cons u t ih =>
+    intro h hex
+    -- destruct the existential *before* any call to `omega`: `omega` preprocesses
+    -- `∃`-hypotheses through `Classical.choice`, which would spoil the axiom audit
+    rcases hex with ⟨w, hw, hwp⟩
+    have htail := D_nonneg_of_nonneg hd0 hdpos h.2
     rw [D_cons]
-    omega
+    by_cases hu : 0 < u
+    · have := hdpos u hu; omega
+    · have hu0 : u = 0 := by have := h.1; omega
+      have hwt : w ∈ t := by
+        rcases List.mem_cons.1 hw with he | hw'
+        · exfalso; rw [he, hu0] at hwp; omega
+        · exact hw'
+      have := ih h.2 ⟨w, hwt, hwp⟩
+      rw [hu0, hd0]; omega
 
-theorem blocks_D_pos {d : Int → Int} (hdpos : ∀ t, 0 < t → 0 < d t) {x : List Int} :
-    ∀ B ∈ blocks x, 0 < D d B := by
-  intro B hB
-  exact D_pos hdpos (fun u hu => blocks_pos B hB u hu) (blocks_mem_ne_nil B hB)
+theorem restr_D_pos (hd0 : d 0 = 0) (hdpos : ∀ t, 0 < t → 0 < d t)
+    {x : List Int} (hx : Nonneg x) : ∀ B ∈ restr x, 0 < D d B :=
+  fun B hB => D_pos_of_mem_pos hd0 hdpos (restr_nonneg hx B hB) (restr_mem_pos B hB)
 
-/-- **Generalised Rayleigh transfer.**  Same mediant argument, arbitrary pointwise
-denominator, still stated by cross multiplication so nothing leaves `Int`. -/
-theorem rayleigh_transfer_general (a b c : Int) (d : Int → Int)
-    (hd0 : d 0 = 0) (hdpos : ∀ t, 0 < t → 0 < d t) {x : List Int}
-    (hx : Nonneg x) (hc : 0 < c) (hiso : 0 < iso x) (hDx : 0 < D d x) :
-    ∃ B ∈ blocks x, 0 < D d B ∧
-      Q a b c B * D d x < Q a b c x * D d B := by
+end RestrDenom
+
+section PosDepTransfer
+
+variable {c : Nat → Nat → Int}
+
+/-- **Corollary 3.1 (strict deficit), position-dependent.**  If some isolated zero is
+flanked by two positive marks and *every* relevant lag-2 coefficient is positive, the block
+sum is strictly below the whole. -/
+theorem isolated_zero_strict_posdep (hband : Bandwidth c 2) (hc2 : ∀ i, 0 < c i 2)
+    {x : List Int} (hx : Nonneg x) (hiso : 0 < iso x) :
+    ((restr x).map (Qf c)).sum < Qf c x := by
+  have hid := gd_identity_band_two hband x hx
+  have hW : 0 < isoW c 0 x := isoW_pos hc2 x hx 0 hiso
+  omega
+
+/-- **Theorem 4.1 (Rayleigh transfer), position-dependent and with an arbitrary pointwise
+denominator.**  The witness is produced by a decidable finite search over the blocks, so no
+choice principle is used. -/
+theorem rayleigh_transfer_posdep (hband : Bandwidth c 2) (hc2 : ∀ i, 0 < c i 2)
+    (d : Int → Int) (hd0 : d 0 = 0) (hdpos : ∀ t, 0 < t → 0 < d t)
+    {x : List Int} (hx : Nonneg x) (hiso : 0 < iso x) (hDx : 0 < D d x) :
+    ∃ B ∈ restr x, 0 < D d B ∧ Qf c B * D d x < Qf c x * D d B := by
   rcases list_forall_or_exists
-      (fun B => 0 < D d B ∧ Q a b c B * D d x < Q a b c x * D d B)
-      (blocks x) with hall | hex
+      (fun B => 0 < D d B ∧ Qf c B * D d x < Qf c x * D d B) (restr x) with hall | hex
   · exfalso
-    have hle : ∀ B ∈ blocks x, Q a b c x * D d B ≤ Q a b c B * D d x := by
+    have hle : ∀ B ∈ restr x, Qf c x * D d B ≤ Qf c B * D d x := by
       intro B hB
-      have hpos : 0 < D d B := blocks_D_pos hdpos B hB
-      have hnn : ¬ (Q a b c B * D d x < Q a b c x * D d B) :=
-        fun hlt => hall B hB ⟨hpos, hlt⟩
+      have hpos : 0 < D d B := restr_D_pos hd0 hdpos hx B hB
+      have hnn : ¬ (Qf c B * D d x < Qf c x * D d B) := fun hlt => hall B hB ⟨hpos, hlt⟩
       omega
-    have hsum := sum_mul_le (Q a b c) (D d) (D d x) (Q a b c x) (blocks x) hle
-    rw [blocks_D_preserved d hd0 x hx] at hsum
-    have hlt : ((blocks x).map (Q a b c)).sum < Q a b c x :=
-      isolated_zero_strict a b c hx hc hiso
+    have hsum := sum_mul_le (Qf c) (D d) (D d x) (Qf c x) (restr x) hle
+    rw [restr_D_preserved d hd0 x hx] at hsum
+    have hlt := isolated_zero_strict_posdep hband hc2 hx hiso
     have hmul := mul_lt_mul_right' hlt hDx
     omega
   · exact hex
 
-/-- `rayleigh_transfer` is the `d = (· * ·)` instance of `rayleigh_transfer_general`. -/
-theorem rayleigh_transfer_from_general (a b c : Int) {x : List Int}
-    (hx : Nonneg x) (hc : 0 < c) (hiso : 0 < iso x) (hS : 0 < sqnorm x) :
-    ∃ B ∈ blocks x, 0 < sqnorm B ∧
-      Q a b c B * sqnorm x < Q a b c x * sqnorm B := by
+/-- **Corollary 4.1.**  The plain mass denominator `Σ_i x_i` is the `d = id` instance. -/
+theorem rayleigh_transfer_posdep_sum (hband : Bandwidth c 2) (hc2 : ∀ i, 0 < c i 2)
+    {x : List Int} (hx : Nonneg x) (hiso : 0 < iso x) (hM : 0 < D id x) :
+    ∃ B ∈ restr x, 0 < D id B ∧ Qf c B * D id x < Qf c x * D id B :=
+  rayleigh_transfer_posdep hband hc2 id rfl (fun _ ht => ht) hx hiso hM
+
+end PosDepTransfer
+
+
+section RestrRayleighToeplitz
+
+/-- The squared norm is the `d = (· * ·)` instance of `restr_D_preserved`. -/
+theorem restr_sqnorm_preserved (x : List Int) (hx : Nonneg x) :
+    ((restr x).map sqnorm).sum = sqnorm x := by
+  have hfun : sqnorm = D (fun t => t * t) := funext sqnorm_eq_D
+  rw [hfun]
+  exact restr_D_preserved (fun t => t * t) (by simp) x hx
+
+/-- **Denominators are position-blind.**  `D d` never looks at where an entry sits, so for
+denominators — unlike for the quadratic form — extraction and masking always agree. -/
+theorem blocks_restr_D_agree (d : Int → Int) (hd0 : d 0 = 0) (x : List Int) (hx : Nonneg x) :
+    ((blocks x).map (D d)).sum = ((restr x).map (D d)).sum := by
+  rw [blocks_D_preserved d hd0 x hx, restr_D_preserved d hd0 x hx]
+
+/-- **Rayleigh transfer, squared-norm denominator.** -/
+theorem rayleigh_transfer_sqnorm {c : Nat → Nat → Int}
+    (hband : Bandwidth c 2) (hc2 : ∀ i, 0 < c i 2) {x : List Int}
+    (hx : Nonneg x) (hiso : 0 < iso x) (hS : 0 < sqnorm x) :
+    ∃ B ∈ restr x, 0 < sqnorm B ∧ Qf c B * sqnorm x < Qf c x * sqnorm B := by
   have hfun : sqnorm = D (fun t => t * t) := funext sqnorm_eq_D
   rw [hfun] at hS ⊢
-  exact rayleigh_transfer_general a b c (fun t => t * t) (by simp)
-    (fun t ht => Int.mul_pos ht ht) hx hc hiso hS
+  exact rayleigh_transfer_posdep hband hc2 (fun t => t * t) (by simp)
+    (fun t ht => Int.mul_pos ht ht) hx hiso hS
 
-theorem D_id_eq_sum : ∀ x : List Int, D id x = x.sum := by
-  intro x
-  induction x with
-  | nil => rfl
-  | cons v r ih => rw [D_cons, ih]; simp
+/-- **Rayleigh transfer, Toeplitz lag-2 form.**  Part 0's transfer, now over the
+position-preserving blocks and derived from the general statement. -/
+theorem rayleigh_transfer_toeplitz (a b c : Int) (hc : 0 < c) {x : List Int}
+    (hx : Nonneg x) (hiso : 0 < iso x) (hS : 0 < sqnorm x) :
+    ∃ B ∈ restr x, 0 < sqnorm B ∧ Q a b c B * sqnorm x < Q a b c x * sqnorm B := by
+  have hfun : Qf (toep a b c) = Q a b c := funext (Qf_toep a b c)
+  have hc2 : ∀ i, 0 < toep a b c i 2 := fun i => by rw [toep_two]; exact hc
+  have h := rayleigh_transfer_sqnorm (toep_band a b c) hc2 hx hiso hS
+  rw [hfun] at h
+  exact h
 
 /-- **Rayleigh transfer for the plain mass denominator `Σ_i x_i`.**  This is the shape the
 application needs: the denominator is the total mass, not the squared norm. -/
-theorem rayleigh_transfer_sum (a b c : Int) {x : List Int}
-    (hx : Nonneg x) (hc : 0 < c) (hiso : 0 < iso x) (hM : 0 < x.sum) :
-    ∃ B ∈ blocks x, 0 < B.sum ∧
-      Q a b c B * x.sum < Q a b c x * B.sum := by
-  have hfun : ∀ y : List Int, D id y = y.sum := D_id_eq_sum
-  have hM' : 0 < D id x := by rw [hfun]; exact hM
-  rcases rayleigh_transfer_general a b c id rfl (fun _ ht => ht) hx hc hiso hM'
+theorem rayleigh_transfer_toeplitz_sum (a b c : Int) (hc : 0 < c) {x : List Int}
+    (hx : Nonneg x) (hiso : 0 < iso x) (hM : 0 < x.sum) :
+    ∃ B ∈ restr x, 0 < B.sum ∧ Q a b c B * x.sum < Q a b c x * B.sum := by
+  have hfun : Qf (toep a b c) = Q a b c := funext (Qf_toep a b c)
+  have hdi : ∀ y : List Int, D id y = y.sum := D_id_eq_sum
+  have hc2 : ∀ i, 0 < toep a b c i 2 := fun i => by rw [toep_two]; exact hc
+  have hM' : 0 < D id x := by rw [hdi]; exact hM
+  rcases rayleigh_transfer_posdep (toep_band a b c) hc2 id rfl (fun _ ht => ht) hx hiso hM'
     with ⟨B, hB, hpos, hlt⟩
-  simp only [hfun] at hpos hlt
+  rw [hfun] at hlt
+  simp only [hdi] at hpos hlt
   exact ⟨B, hB, hpos, hlt⟩
 
-end GenDenom
+end RestrRayleighToeplitz
+
+/-! ## Part 5.  Copositive matrices -/
+
+section Copositive
+
+variable {c : Nat → Nat → Int}
+
+/-- `A` is **copositive**: `Q(x) ≥ 0` for every nonnegative `x`. -/
+def Copositive (c : Nat → Nat → Int) : Prop := ∀ x : List Int, Nonneg x → 0 ≤ Qf c x
+
+/-- `u` is a **zero** of `A`: nonnegative, not identically zero, and `Q(u) = 0`. -/
+structure IsZero (c : Nat → Nat → Int) (u : List Int) : Prop where
+  nonneg     : Nonneg u
+  nontrivial : ∃ v ∈ u, 0 < v
+  vanishes   : Qf c u = 0
+
+/-- `u` is a **minimal zero**: no zero of `A` has strictly smaller support.  A `w` with
+`Masked w u` is exactly a `w` with `supp w ⊆ supp u` agreeing with `u` there, and such a `w`
+has `supp w = supp u` precisely when `w = u`. -/
+def MinimalZero (c : Nat → Nat → Int) (u : List Int) : Prop :=
+  IsZero c u ∧ ∀ w : List Int, Masked w u → IsZero c w → w = u
+
+/-- The support of `x` is an **interval**: `x` has at most one maximal run of strictly
+positive entries. -/
+def IsInterval (x : List Int) : Prop := (restr x).length ≤ 1
+
+/-- **Copositive corollary (i).**  For a copositive bandwidth-2 matrix with every `c i 2 > 0`,
+no zero has an isolated zero entry: the support is separated by gaps of width `≥ 2`. -/
+theorem copositive_zero_iso (hband : Bandwidth c 2) (hc2 : ∀ i, 0 < c i 2)
+    (hcop : Copositive c) {u : List Int} (hu : IsZero c u) : iso u = 0 := by
+  have hnn : 0 ≤ iso u := iso_nonneg u hu.nonneg
+  by_cases hpos : 0 < iso u
+  · exfalso
+    have hW : 0 < isoW c 0 u := isoW_pos hc2 u hu.nonneg 0 hpos
+    have hid := gd_identity_band_two hband u hu.nonneg
+    rw [hu.vanishes] at hid
+    have hblocks : 0 ≤ ((restr u).map (Qf c)).sum :=
+      sum_map_nonneg (Qf c) (restr u) (fun B hB => hcop B (restr_nonneg hu.nonneg B hB))
+    omega
+  · omega
+
+/-- Under the hypotheses of (i), every block restriction of a zero is itself a zero. -/
+theorem copositive_restr_isZero (hband : Bandwidth c 2) (hc2 : ∀ i, 0 < c i 2)
+    (hcop : Copositive c) {u : List Int} (hu : IsZero c u) :
+    ∀ B ∈ restr u, IsZero c B := by
+  have hiso : iso u = 0 := copositive_zero_iso hband hc2 hcop hu
+  have hW : isoW c 0 u = 0 := isoW_eq_zero_of_iso_eq_zero u hu.nonneg 0 hiso
+  have hid := gd_identity_band_two hband u hu.nonneg
+  rw [hu.vanishes, hW, Int.add_zero] at hid
+  have hnn : ∀ B ∈ restr u, 0 ≤ Qf c B :=
+    fun B hB => hcop B (restr_nonneg hu.nonneg B hB)
+  have hzero := sum_map_eq_zero (Qf c) (restr u) hnn hid.symm
+  exact fun B hB =>
+    { nonneg := restr_nonneg hu.nonneg B hB
+      nontrivial := restr_mem_pos B hB
+      vanishes := hzero B hB }
+
+/-- **Copositive corollary (ii).**  For a copositive bandwidth-2 matrix with every
+`c i 2 > 0`, the support of a minimal zero is an interval. -/
+theorem copositive_minimalZero_isInterval (hband : Bandwidth c 2) (hc2 : ∀ i, 0 < c i 2)
+    (hcop : Copositive c) {u : List Int} (hu : MinimalZero c u) : IsInterval u := by
+  have hu0 := hu.1
+  have hblocks := copositive_restr_isZero hband hc2 hcop hu0
+  have hD := restr_D_preserved id rfl u hu0.nonneg
+  by_cases hlen : (restr u).length ≤ 1
+  · exact hlen
+  · exfalso
+    have h2 : 2 ≤ (restr u).length := by omega
+    cases hb : restr u with
+    | nil => rw [hb] at h2; simp at h2
+    | cons B L =>
+      cases hL : L with
+      | nil => rw [hb, hL] at h2; simp at h2
+      | cons C T =>
+        have hBmem : B ∈ restr u := by rw [hb]; exact List.mem_cons_self ..
+        have hCmem : C ∈ restr u := by
+          rw [hb, hL]; exact List.mem_cons_of_mem _ (List.mem_cons_self ..)
+        -- the first restriction is a zero of `A` and a masking of `u`, hence *is* `u`
+        have hBu : B = u := hu.2 B (restr_masked B hBmem) (hblocks B hBmem)
+        -- but the second run carries strictly positive mass, so `B` is strictly lighter
+        have hCpos : 0 < D id C := restr_D_pos rfl (fun _ ht => ht) hu0.nonneg C hCmem
+        have hTnn : 0 ≤ (T.map (D id)).sum :=
+          sum_map_nonneg (D id) T (fun z hz =>
+            have := restr_D_pos (d := id) rfl (fun _ ht => ht) hu0.nonneg z
+              (by rw [hb, hL]; exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hz))
+            Int.le_of_lt this)
+        rw [hb, hL] at hD
+        simp only [List.map_cons, List.sum_cons] at hD
+        rw [hBu] at hD
+        omega
+
+end Copositive
 
 /-! ## Numeric cross-checks against the exhaustive Python sweep -/
 
@@ -873,81 +1448,244 @@ example : blocks [0,1,0]         = [[1]]         := by decide
 example : blocks [1,0,0,1]       = [[1],[1]]     := by decide
 example : blocks [3,0,3,0,3,0,3] = [[3],[3],[3],[3]] := by decide
 
+-- the position-preserving restrictions of the same signals: same length as the input
+example : restr ([] : List Int) = []                       := by decide
+example : restr [0,0]           = []                       := by decide
+example : restr [1,2,3]         = [[1,2,3]]                := by decide
+example : restr [0,1,0]         = [[0,1,0]]                := by decide
+example : restr [1,0,0,1]       = [[1,0,0,0],[0,0,0,1]]    := by decide
+example : restr [1,1,0,1,1]     = [[1,1,0,0,0],[0,0,0,1,1]] := by decide
+
 -- `iso` ignores zeros that are not flanked on both sides
 example : iso [1,0,0,1] = 0 := by decide
 example : iso [0,1,0]   = 0 := by decide
 
--- Part 1: `Q` really is the `coef = [a,b,c]` instance, and the cross term really is `c · iso`
-example : Q 4369 (-6314) 2050 [1,1,0,1,1] = Qgen [4369,-6314,2050] [1,1,0,1,1] := by decide
-example : crossDefect [4369,-6314,2050] [1,1,0,1,1] = 2050 := by decide
-example : crossDefect [4369,-6314,2050] [1,0,1]     = 2050 := by decide
+/-! ### The counterexample family: extraction versus masking -/
 
--- Part 1: at lag 3 the cross term is genuinely nonzero — `coef = [1,0,0,1]`, `x = [1,0,0,1]`
-example : Qgen [1,0,0,1] [1,0,0,1] = 3 := by decide
-example : ((blocks [1,0,0,1]).map (Qgen [1,0,0,1])).sum = 2 := by decide
-example : crossDefect [1,0,0,1] [1,0,0,1] = 1 := by decide
+/-- The minimal counterexample of the introduction: a **diagonal** matrix whose diagonal is
+`(1, 1, 5)`.  Every off-diagonal coefficient vanishes, so the cross term is identically `0`
+and the identity is a statement about the diagonal alone. -/
+def cEx : Nat → Nat → Int := fun i L => if L = 0 then (if i = 2 then 5 else 1) else 0
 
--- Part 2: blocking preserves the squared norm
-example : sqnorm [1,1,0,1,1] = 4 := by decide
-example : ((blocks [1,1,0,1,1]).map sqnorm).sum = 4 := by decide
-example : ((blocks [3,0,3,0,3,0,3]).map sqnorm).sum = sqnorm [3,0,3,0,3,0,3] := by decide
+example : Qf cEx [1,0,1]                            = 6 := by decide
+example : cross cEx 0 [1,0,1]                       = 0 := by decide
+example : ((restr  [1,0,1]).map (Qf cEx)).sum       = 6 := by decide
+example : ((blocks [1,0,1]).map (Qf cEx)).sum       = 2 := by decide
 
--- Part 3: the same preservation for an arbitrary pointwise `d` with `d 0 = 0`
+/-- **The extraction form of the identity is false for position-dependent coefficients.**
+Extracted blocks are re-indexed from `0`, so the mark at position `2` is charged the
+coefficient of position `0`.  Contrast `Qblocks_eq_Qrestr`, where Toeplitz coefficients make
+the two forms agree for every nonnegative signal. -/
+theorem extraction_breaks_position_dependence :
+    ((blocks [1,0,1]).map (Qf cEx)).sum + cross cEx 0 [1,0,1] ≠ Qf cEx [1,0,1] := by decide
+
+/-- …while the position-preserving form is exact on the same data. -/
+example : ((restr [1,0,1]).map (Qf cEx)).sum + cross cEx 0 [1,0,1] = Qf cEx [1,0,1] := by decide
+
+/-- **Nonnegativity is required.**  At `x = [1,-1,1]` position `1` lies outside every run, so
+its diagonal contribution is lost and even the position-preserving identity fails. -/
+theorem nonneg_is_needed :
+    ((restr [1,-1,1]).map (Qf cEx)).sum + cross cEx 0 [1,-1,1] ≠ Qf cEx [1,-1,1] := by decide
+
+example : restr [1,-1,1] = [[1,0,0],[0,0,1]] := by decide
+example : Qf cEx [1,-1,1] = 7 := by decide
+example : ((restr [1,-1,1]).map (Qf cEx)).sum = 6 := by decide
+
+/-! ### Position-dependent coefficient functions used by the sweeps -/
+
+/-- A genuinely non-Toeplitz bandwidth-2 matrix: **every** diagonal varies with position. -/
+def cVar : Nat → Nat → Int := fun i L =>
+  if L = 0 then 4369 + 11 * (i : Int)
+  else if L = 1 then -6314 + 5 * (i : Int)
+  else if L = 2 then 2050 + 7 * (i : Int)
+  else 0
+
+theorem cVar_band : Bandwidth cVar 2 := by
+  intro i L h
+  simp only [cVar]
+  rw [if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+
+theorem cVar_c2_pos (i : Nat) : 0 < cVar i 2 := by
+  show (0 : Int) < 2050 + 7 * (i : Int)
+  omega
+
+/-- A non-Toeplitz matrix with a *negative* varying diagonal: it has many zeros, which is
+what makes the copositive sweeps non-vacuous. -/
+def cNeg : Nat → Nat → Int := fun i L =>
+  if L = 0 then -(2 + (i : Int))
+  else if L = 1 then 1
+  else if L = 2 then 3 + (i : Int)
+  else 0
+
+theorem cNeg_band : Bandwidth cNeg 2 := by
+  intro i L h
+  simp only [cNeg]
+  rw [if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+
+theorem cNeg_c2_pos (i : Nat) : 0 < cNeg i 2 := by
+  show (0 : Int) < 3 + (i : Int)
+  omega
+
+/-- Bandwidth 1: no lag-2 coefficient at all, so `cross_eq_zero_of_band_one` applies. -/
+def cBand1 : Nat → Nat → Int := fun i L =>
+  if L = 0 then 7 + (i : Int) else if L = 1 then -3 - 2 * (i : Int) else 0
+
+/-- Bandwidth 3: lag 3 genuinely straddles a block boundary, so `cross` is not vacuous. -/
+def cLag3 : Nat → Nat → Int := fun i L =>
+  if L = 0 then 1 else if L = 3 then 1 + (i : Int) else 0
+
+example : Qf cLag3 [1,0,0,1]                          = 3 := by decide
+example : ((restr [1,0,0,1]).map (Qf cLag3)).sum      = 2 := by decide
+example : cross cLag3 0 [1,0,0,1]                     = 1 := by decide
+-- the two lag-3 straddling pairs carry *different* coefficients, `1` and `4`
+example : Qf cLag3 [1,0,0,1,0,0,1]                     = 8 := by decide
+example : ((restr [1,0,0,1,0,0,1]).map (Qf cLag3)).sum = 3 := by decide
+example : cross cLag3 0 [1,0,0,1,0,0,1]                = 5 := by decide
+
+-- Part 2: the Toeplitz bridge
+example : Qf (toep 4369 (-6314) 2050) [1,1,0,1,1] = Q 4369 (-6314) 2050 [1,1,0,1,1] := by decide
+example : cross (toep 4369 (-6314) 2050) 0 [1,1,0,1,1] = 2050 := by decide
+example : cross (toep 4369 (-6314) 2050) 0 [1,0,1]     = 2050 := by decide
+example : isoW (toep 4369 (-6314) 2050) 0 [3,0,3,0,3,0,3] = 2050 * 27 := by decide
+-- …and the position-dependent weighting really does differ from `c · iso`
+example : isoW cVar 0 [1,0,1,0,1] = (2050 + 0) + (2050 + 14) := by decide
+
+-- Part 4: preservation of an arbitrary pointwise `d` with `d 0 = 0`
 example : D id [1,1,0,1,1] = ([1,1,0,1,1] : List Int).sum := by decide
 example : D (fun t => t * t) [1,1,0,1,1] = sqnorm [1,1,0,1,1] := by decide
-example : (blocks [1,1,0,1,1]).map (fun B => B.sum) = [2, 2] := by decide
-example : ((blocks [1,1,0,1,1]).map (D id)).sum = D id [1,1,0,1,1] := by decide
--- `d t = 7t - 3t²` is nowhere near positive-definite, yet preservation still holds
-example : ((blocks [1,2,0,3,1]).map (D (fun t => 7*t - 3*t*t))).sum
+example : ((restr [1,1,0,1,1]).map (D id)).sum = D id [1,1,0,1,1] := by decide
+example : ((restr [1,2,0,3,1]).map (D (fun t => 7*t - 3*t*t))).sum
         = D (fun t => 7*t - 3*t*t) [1,2,0,3,1] := by decide
 -- `d t = t + 1` has `d 0 = 1 ≠ 0`, and preservation genuinely breaks
-example : ((blocks [1,0,1]).map (D (fun t => t + 1))).sum ≠ D (fun t => t + 1) [1,0,1] := by decide
+example : ((restr [1,0,1]).map (D (fun t => t + 1))).sum ≠ D (fun t => t + 1) [1,0,1] := by decide
+
+-- Part 3: the restrictions really are length-preserving maskings
+example : maskedB [1,0,0,0] [1,0,0,1] = true  := by decide
+example : maskedB [1,0,0,2] [1,0,0,1] = false := by decide
+example : (restr [1,1,0,1,1]).all (fun B => maskedB B [1,1,0,1,1]) = true := by decide
 
 /-! ### Executable exhaustive re-run of the Python sweep
 
-`n ≤ 7`, marks `0..3`, `a = 4369, b = -6314, c = 2050`.  This is an *executable check*,
-not a proof — `gd_identity` already covers every nonnegative list.  It exists so that the
-Lean definitions can be confronted with the independent Python sweep on identical data. -/
+`n ≤ 7`, marks `0..3`: `4^0 + 4^1 + … + 4^7 = 21845` signals per sweep.  These are
+*executable checks*, not proofs — the theorems above already cover every nonnegative list.
+They exist so that the Lean definitions can be confronted with the independent Python sweep
+on identical data, and so that the failure of the extraction form is pinned down by a
+number rather than by a single hand-picked example. -/
 
 private def allLists : Nat → List (List Int)
   | 0     => [[]]
   | n + 1 => (allLists n).flatMap (fun l => [0, 1, 2, 3].map (fun v => v :: l))
 
-private def gdViolations (a b c : Int) (n : Nat) : Nat :=
-  ((allLists n).filter (fun x => Q a b c x != Qblocks a b c x + c * iso x)).length
+/-- **Theorem 2.1, its extraction form, and Corollary 2.1 — in one pass.**  Per signal the
+triple counts violations of
 
-private def genViolations (coef : List Int) (n : Nat) : Nat :=
-  ((allLists n).filter (fun x =>
-    Qgen coef x != ((blocks x).map (Qgen coef)).sum + crossDefect coef x)).length
+  1. `Qf c x = Σ_r Qf c (x^(r)) + cross c x`   (position-preserving blocks — must be `0`),
+  2. the same equation with *extracted* blocks (must be nonzero off Toeplitz),
+  3. `cross c x = isoW c x`                    (Corollary 2.1 — must be `0` when `c` is
+     bandwidth 2, which both matrices below are).
 
-private def sqnormViolations (n : Nat) : Nat :=
-  ((allLists n).filter (fun x => ((blocks x).map sqnorm).sum != sqnorm x)).length
+Sharing `Qf c x` and `cross c 0 x` across the three keeps the sweep to a single traversal. -/
+private def identityCounts (c : Nat → Nat → Int) (n : Nat) : Nat × Nat × Nat :=
+  (allLists n).foldl
+    (fun acc x =>
+      let k := Qf c x - cross c 0 x
+      (acc.1        + (if ((restr  x).map (Qf c)).sum == k       then 0 else 1),
+       acc.2.1      + (if ((blocks x).map (Qf c)).sum == k       then 0 else 1),
+       acc.2.2      + (if cross c 0 x == isoW c 0 x              then 0 else 1)))
+    (0, 0, 0)
 
-private def crossNonzero (coef : List Int) (n : Nat) : Nat :=
-  ((allLists n).filter (fun x => crossDefect coef x != 0)).length
+/-- Signals whose cross term is nonzero. -/
+private def crossNonzero (c : Nat → Nat → Int) (n : Nat) : Nat :=
+  ((allLists n).filter (fun x => cross c 0 x != 0)).length
 
-private def dViolations (d : Int → Int) (n : Nat) : Nat :=
-  ((allLists n).filter (fun x => ((blocks x).map (D d)).sum != D d x)).length
+/-- Theorem 2.1 beyond bandwidth 2, and the non-vacuity of `cross` there.  The pair is
+`(violations of the position-preserving identity, signals with a nonzero cross term)`. -/
+private def lagThreeCounts (c : Nat → Nat → Int) (n : Nat) : Nat × Nat :=
+  (allLists n).foldl
+    (fun acc x =>
+      let k := cross c 0 x
+      (acc.1 + (if Qf c x == ((restr x).map (Qf c)).sum + k then 0 else 1),
+       acc.2 + (if k == 0 then 0 else 1)))
+    (0, 0)
 
--- Each line is one entry per `n = 0 .. 7`.
--- Expected: `[0, 0, 0, 0, 0, 0, 0, 0]`  — lag-2 GD identity.
-#eval (List.range 8).map (gdViolations 4369 (-6314) 2050)
--- Expected: `[0, 0, 0, 0, 0, 0, 0, 0]`  — general GD identity at lag 4.
-#eval (List.range 8).map (genViolations [7, -3, 5, 11, -2])
--- Expected: `[0, 0, 0, 0, 0, 0, 0, 0]`  — squared norm preserved by blocking.
-#eval (List.range 8).map sqnormViolations
--- Expected: `[0, 0, 0, 0, 0, 0, 0, 0]`  — pure lag 0 never straddles a block boundary.
-#eval (List.range 8).map (crossNonzero [1])
--- Expected: `[0, 0, 0, 0, 0, 0, 0, 0]`  — pure lag 1 never straddles either (`straddle_lag_ge_two`).
-#eval (List.range 8).map (crossNonzero [0, 1])
--- Expected: nonzero from n = 4 on  — lag 3 DOES straddle, so the cross term is not vacuous.
-#eval (List.range 8).map (crossNonzero [0, 0, 0, 1])
--- Expected: `[0, 0, 0, 0, 0, 0, 0, 0]`  — `d t = 7t - 3t²` satisfies only `d 0 = 0`, and that
--- is enough: `blocks_D_preserved` needs no positivity of `d`.
-#eval (List.range 8).map (dViolations (fun t => 7*t - 3*t*t))
--- Expected: nonzero from n = 1 on  — `d t = t + 1` has `d 0 = 1 ≠ 0`, and preservation breaks.
--- So `d 0 = 0` is not a convenience hypothesis; it is exactly what the law needs.
-#eval (List.range 8).map (dViolations (fun t => t + 1))
+/-- Part 0's lag-2 GD identity with *extracted* blocks, and `Qblocks_eq_Qrestr`: for Toeplitz
+coefficients extraction and masking agree.  The pair is `(gd violations, agree violations)`. -/
+private def toeplitzCounts (a b c : Int) (n : Nat) : Nat × Nat :=
+  (allLists n).foldl
+    (fun acc x =>
+      let Qb := Qblocks a b c x
+      (acc.1 + (if Q a b c x == Qb + c * iso x                   then 0 else 1),
+       acc.2 + (if ((restr x).map (Q a b c)).sum == Qb           then 0 else 1)))
+    (0, 0)
+
+/-- Lemma 4.1: `Σ_r D d (x^(r)) = D d x` whenever `d 0 = 0`.  The pair is
+`(violations for d t = 7t − 3t², violations for d t = t + 1)`; the second `d` has `d 0 = 1`,
+so it must fail — `d 0 = 0` is not a convenience hypothesis. -/
+private def restrDCounts (n : Nat) : Nat × Nat :=
+  (allLists n).foldl
+    (fun acc x =>
+      let R := restr x
+      (acc.1 + (if (R.map (D (fun t => 7*t - 3*t*t))).sum == D (fun t => 7*t - 3*t*t) x
+                then 0 else 1),
+       acc.2 + (if (R.map (D (fun t => t + 1))).sum == D (fun t => t + 1) x
+                then 0 else 1)))
+    (0, 0)
+
+/-- **Structure of the restrictions, and copositive corollary (ii).**  The triple counts
+
+  1. signals with a restriction that is not a length-preserving masking (must be `0`),
+  2. signals with two or more runs (the test set for (ii) — must be nonzero),
+  3. among those, signals whose first restriction is *not* a proper masking of `x`
+     (must be `0`): this is what contradicts minimality in
+     `copositive_minimalZero_isInterval`. -/
+private def submaskCounts (n : Nat) : Nat × Nat × Nat :=
+  (allLists n).foldl
+    (fun acc x =>
+      let R := restr x
+      let m := if R.all (fun B => maskedB B x && B.length == x.length) then 0 else 1
+      if 2 ≤ R.length then
+        let B := R.headD []
+        (acc.1 + m, acc.2.1 + 1,
+         acc.2.2 + (if maskedB B x ∧ D id B < D id x then 0 else 1))
+      else (acc.1 + m, acc.2.1, acc.2.2))
+    (0, 0, 0)
+
+/-- **Copositive corollary (i), engine form.**  Whenever `Qf c x ≤ 0` and `x` has an isolated
+zero, some block restriction must satisfy `Qf c B < 0`, because
+`Σ_r Qf c (x^(r)) = Qf c x − isoW c 0 x < 0`.  A copositive matrix cannot do that, which is
+exactly the proof of `copositive_zero_iso` (there `Qf c x = 0`; `≤ 0` runs the same argument
+on a larger test set).  The pair is `(signals tested, violations)`. -/
+private def copositiveCounts (c : Nat → Nat → Int) (n : Nat) : Nat × Nat :=
+  (allLists n).foldl
+    (fun acc x =>
+      if Qf c x ≤ 0 ∧ 0 < iso x then
+        (acc.1 + 1, acc.2 + (if (restr x).any (fun B => decide (Qf c B < 0)) then 0 else 1))
+      else acc)
+    (0, 0)
+
+-- Each line is one entry per `n = 0 .. 7`; `21845` signals in total per line.
+
+-- Expected: `[(0,0,0), (0,0,0), (0,3,0), (0,24,0), (0,135,0), (0,660,0), (0,3003,0),
+--             (0,13104,0)]`
+-- Theorem 2.1 and Corollary 2.1 hold for a genuinely non-Toeplitz bandwidth-2 matrix;
+-- the EXTRACTION form does not.
+#eval (List.range 8).map (identityCounts cVar)
+-- Expected: middle component nonzero from n = 3 on, outer components all `0`.
+-- The same for the diagonal counterexample family of the introduction.
+#eval (List.range 8).map (identityCounts cEx)
+-- Expected: first component all `0` (Theorem 2.1 also holds at lag 3), second nonzero from
+-- n = 4 on (lag 3 DOES straddle a block boundary, so `cross` is not vacuous).
+#eval (List.range 8).map (lagThreeCounts cLag3)
+-- Expected: `[(0,0), …]`  — Part 0's identity, and `Qblocks_eq_Qrestr`.
+#eval (List.range 8).map (toeplitzCounts 4369 (-6314) 2050)
+-- Expected: `[0, 0, 0, 0, 0, 0, 0, 0]`  — Theorem 2.2: bandwidth 1 never straddles.
+#eval (List.range 8).map (crossNonzero cBand1)
+-- Expected: first component all `0`, second nonzero from n = 1 on (`d 0 = 1 ≠ 0` breaks it).
+#eval (List.range 8).map restrDCounts
+-- Expected: first and third components all `0`, second nonzero from n = 3 on.
+#eval (List.range 8).map submaskCounts
+-- Expected: second component all `0`, first nonzero (the test is not vacuous).
+#eval (List.range 8).map (copositiveCounts cNeg)
 
 end Checks
 
