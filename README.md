@@ -12,12 +12,12 @@ copositive matrices.
 
 | | |
 |---|--:|
-| source | `LagTwoPositivity.lean`, 1 692 lines |
-| theorems | 130 |
-| definitions | 37 (+ 1 structure) |
+| source | `LagTwoPositivity.lean`, 1 954 lines |
+| theorems | 146 |
+| definitions | 40 (+ 1 structure) |
 | `example`s checked by `decide` | 52 |
 | build-time exhaustive invariants | 18, across 8 traversals |
-| clean build (`rm -rf .lake/build && lake build`) | ~4.4 s |
+| clean build (`rm -rf .lake/build && lake build`) | ~4.6 s |
 | dependencies to fetch | none |
 
 ## The point: blocks must preserve position
@@ -123,6 +123,34 @@ defect is `Σ_k c (k−1) 2 · x_{k−1} · x_{k+1}`, not a single scalar times 
 subtract `gd_identity` from `gd_identity_restr`, the `c · iso x` terms cancel, and the two
 block sums must coincide for every nonnegative `x`. Off Toeplitz they do not.
 
+### §7 — the defect minimum
+
+§7 claims that with `(a, b, c) = (4369, -6314, -100)` the configuration `(3,0,3,0,3,0,3)`
+realises defect `-2700`, **the minimum** over all configurations with an isolated zero, marks
+in `{0,…,3}` and length at most seven. Write `defect x = Q x - Qblocks x`.
+
+| theorem | statement |
+|---|---|
+| `iso_pair_bound` | `x ≠ []`, marks `≤ 3` → `2 · iso x + 9 ≤ 9 · x.length` |
+| `iso_le_27` | marks in `{0,…,3}` and `x.length ≤ 7` → `iso x ≤ 27` |
+| `defect_ge_neg_2700` | the same hypotheses → `-2700 ≤ defect x` |
+| `defect_attained` | `(3,0,3,0,3,0,3)` satisfies them, carries an isolated zero, and has `defect = -2700` |
+| `defectMin_eq_neg_2700` | `defectMin 7 = -2700` — the same statement over `allLists 7` |
+
+This is a **proof, not an enumeration**. `gd_identity` turns the defect into `c · iso x`, so
+with `c < 0` minimising the defect means maximising `iso x`. Each isolated zero contributes at
+most `3 · 3 = 9`, and two isolated zeros can never be adjacent — an isolated zero needs a
+strictly positive right neighbour — so a signal of length `L` carries at most `⌊(L-1)/2⌋` of
+them; at `L = 7` that is `3`, giving `iso ≤ 27` and `defect ≥ -2700`. `iso_pair_bound` is the
+induction that makes "never adjacent" precise: it carries the bound for `x` **and** for
+`tl x`, because the case where the coupling fires consumes two positions at once.
+
+So the bound holds for *every* signal in the class, not only for the 21 845 the sweeps
+enumerate — and it costs nothing at build time. (A kernel-checked enumeration of the same
+fact via `decide +kernel` costs about +37 s on `Q - Qblocks`, or +4.5 s if routed through
+`iso`; the proof costs +0.0 s and says more.) `defectMin` is still computed and printed, and
+both its lower bound and its value at `n = 7` are theorems.
+
 ## Part 3 — masking and support
 
 | theorem | statement |
@@ -216,8 +244,8 @@ lake build
 Requires only the Lean toolchain pinned in `lean-toolchain` (`leanprover/lean4:v4.33.0`).
 Nothing is downloaded; there is no dependency to fetch.
 
-The build runs **eight** executable exhaustive traversals, each over every `x ∈ {0,1,2,3}^n`
-for `n = 0 … 7` (21 845 signals per traversal), tracking **eighteen** invariants in total,
+The build runs **nine** executable exhaustive traversals, each over every `x ∈ {0,1,2,3}^n`
+for `n = 0 … 7` (21 845 signals per traversal), tracking **nineteen** quantities in total,
 and prints one line each:
 
 ```
@@ -237,6 +265,8 @@ and prints one line each:
       restrictions are length-preserving maskings / signals with ≥ 2 runs / (ii)'s core
 [(0,0), (0,0), (0,0), (9,0), (72,0), (405,0), (2007,0), (9333,0)]
       copositive (i): signals tested / violations
+[0, 0, 0, -900, -900, -1800, -1800, -2700]
+      §7: the running minimum of the defect over configurations with an isolated zero
 ```
 
 These are *checks*, not proofs — the theorems already cover every nonnegative list. They are
@@ -251,11 +281,13 @@ here because:
 * **line 6** brackets the hypothesis of `restr_D_preserved` from both sides — dropping
   positivity of `d` changes nothing, dropping `d 0 = 0` breaks it at `n = 1`;
 * **lines 7–8** show the copositive corollaries are tested on a non-empty set (9 333 and
-  11 475 signals of length 7) and never fail.
+  11 475 signals of length 7) and never fail;
+* **line 9** is the §7 running minimum — the only printed line that is also a theorem
+  (`defectMin_ge_neg_2700`, `defectMin_eq_neg_2700`), so it is a display, not evidence.
 
 ## Trust
 
-`#print axioms` on every one of the 211 declarations in the file reports exactly
+`#print axioms` on every one of the 237 declarations in the file reports exactly
 
 ```
 [propext, Quot.sound]
@@ -271,9 +303,13 @@ The two places excluded middle would normally creep in:
 * every proof by contradiction — written as `by_cases` on a decidable proposition, never as
   `by_contra`.
 
-One subtlety worth recording: `omega` preprocesses `∃`-typed hypotheses through
-`Classical.choice`. In `D_pos_of_mem_pos` the existential is therefore destructed *before*
-any call to `omega`; otherwise eight downstream theorems pick up `Classical.choice`.
+Two `omega` subtleties worth recording, both of which silently spoil the audit:
+
+* `omega` preprocesses `∃`-typed **hypotheses** through `Classical.choice`. In
+  `D_pos_of_mem_pos` the existential is therefore destructed *before* any call to `omega`;
+  otherwise eight downstream theorems pick up `Classical.choice`.
+* `omega` also uses choice to split a **conjunctive goal** `A ∧ B`. In `allLists_spec` the
+  conjunction is split by hand first.
 
 Squares are written `v * v` rather than `v ^ 2` so that `omega` sees them as atoms;
 `Q_cons_sq` records that this agrees with the `^ 2` form.

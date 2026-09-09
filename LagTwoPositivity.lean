@@ -54,6 +54,15 @@ maximal positive runs, `iso x = Σ_{isolated zeros i} x_{i-1}·x_{i+1}`.
   * `gd_identity_restr`     Part 0's identity re-derived from `cross_eq_isoW`
   * `Qblocks_eq_Qrestr`     **extraction and masking agree exactly when `c` is Toeplitz**
 
+and §7's minimality claim, at `(a, b, c) = (4369, -6314, -100)` with
+`defect x = Q x − Qblocks x`:
+
+  * `iso_pair_bound`        isolated zeros are never adjacent: `2 · iso x + 9 ≤ 9 · |x|`
+  * `iso_le_27`             marks in `{0,…,3}` and `|x| ≤ 7`  ⟹  `iso x ≤ 27`
+  * `defect_ge_neg_2700`    hence `defect x ≥ −2700` for **every** such signal
+  * `defect_attained`       and `(3,0,3,0,3,0,3)` is such a signal, with `defect = −2700`
+  * `defectMin_eq_neg_2700` the same over the sweeps' own search space `allLists 7`
+
 ### Part 3 — masking and support
 
   * `Masked w u`        `w` is `u` with some entries zeroed (same length, same order)
@@ -105,6 +114,10 @@ term into `isoW`.
 no `Classical.choice` and no `sorryAx`.  The one finite search (`list_forall_or_exists`,
 used by the Rayleigh transfers) is decidable, so it needs no excluded middle; likewise
 every proof by contradiction goes through `by_cases` on a decidable proposition.
+
+Two `omega` traps to keep the audit clean: `omega` preprocesses `∃`-typed **hypotheses**
+through `Classical.choice` (so `D_pos_of_mem_pos` destructs its existential first), and it
+also uses choice to split a **conjunctive goal** (so `allLists_spec` splits by hand).
 
 Squares are written `v * v` rather than `v ^ 2` so that `omega` sees them as atoms;
 `Q_cons_sq` records that this agrees with the `^ 2` form.
@@ -859,6 +872,114 @@ theorem Qblocks_eq_Qrestr (x : List Int) (hx : Nonneg x) :
 
 end Toeplitz
 
+/-! ### §7.  The defect minimum at `(a, b, c) = (4369, -6314, -100)`
+
+`gd_identity` turns the defect `Q − Qblocks` into `c · iso`, so with `c < 0` minimising the
+defect is the same as *maximising* the isolated-zero coupling.  With marks in `{0,…,3}` each
+isolated zero contributes at most `3 · 3 = 9`, and two isolated zeros can never be adjacent
+(an isolated zero needs a strictly positive right neighbour), so a signal of length `L`
+carries at most `⌊(L−1)/2⌋` of them.  At `L = 7` that is `3`, hence `iso ≤ 27` and
+`defect ≥ −2700`.  The bound is proved for **every** such signal, not only for the `21 845`
+that the sweeps below enumerate. -/
+
+section DefectMin
+
+/-- Two marks in `{0,…,3}` pair up to at most `9`. -/
+theorem mul_le_nine {p q : Int} (hp : p ≤ 3) (hq0 : 0 ≤ q) (hq : q ≤ 3) : p * q ≤ 9 := by
+  have := Int.mul_le_mul hp hq hq0 (by omega)
+  omega
+
+/-- **Isolated zeros are never adjacent.**  For a nonempty signal with marks in `{0,…,3}`,
+`2 · iso x + 9 ≤ 9 · |x|`.  The bound is carried together with the same bound for `tl x`,
+because the case where the coupling fires consumes *two* positions — the mark and the zero
+just after it — and so needs the induction hypothesis one step further down. -/
+theorem iso_pair_bound :
+    ∀ x : List Int, Nonneg x → (∀ v ∈ x, v ≤ 3) →
+      (x ≠ [] → 2 * iso x + 9 ≤ 9 * (x.length : Int)) ∧
+      (tl x ≠ [] → 2 * iso (tl x) + 9 ≤ 9 * ((tl x).length : Int)) := by
+  intro x
+  induction x with
+  | nil => intro _ _; exact ⟨fun h => absurd rfl h, fun h => absurd rfl h⟩
+  | cons v r ih =>
+    intro hx hb
+    have hr : Nonneg r := nonneg_tail hx
+    have hbr : ∀ w ∈ r, w ≤ 3 := fun w hw => hb w (List.mem_cons_of_mem _ hw)
+    obtain ⟨IH1, IH2⟩ := ih hr hbr
+    refine ⟨fun _ => ?_, fun h => IH1 (by simpa using h)⟩
+    rw [iso_cons]
+    by_cases hc : hd r = 0 ∧ 0 < v ∧ 0 < hd (tl r)
+    · rw [if_pos hc]
+      have h0 := hc.1
+      have hsp := hc.2.2
+      cases r with
+      | nil => simp at hsp
+      | cons u s =>
+        cases s with
+        | nil => simp at hsp
+        | cons w s' =>
+          simp only [hd_cons, tl_cons] at h0 hsp ⊢
+          have hIH := IH2 (by simp)
+          simp only [tl_cons] at hIH
+          -- the zero at position 1 cannot itself carry a coupling
+          have hisor : iso (u :: w :: s') = iso (w :: s') := by
+            rw [iso_cons, if_neg (by rintro ⟨-, hcon, -⟩; omega), Int.zero_add]
+          have hvw : v * w ≤ 9 :=
+            mul_le_nine (hb v (List.mem_cons_self ..)) (by omega)
+              (hb w (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_self ..))))
+          simp only [List.length_cons] at hIH ⊢
+          omega
+    · rw [if_neg hc]
+      by_cases hrnil : r = []
+      · subst hrnil; simp
+      · have hI := IH1 hrnil
+        have hnn := iso_nonneg r hr
+        simp only [List.length_cons]
+        omega
+
+/-- With marks in `{0,…,3}` and length at most seven, `iso x ≤ 27`, attained by
+`(3,0,3,0,3,0,3)`. -/
+theorem iso_le_27 (x : List Int) (hx : Nonneg x) (hb : ∀ v ∈ x, v ≤ 3)
+    (hlen : x.length ≤ 7) : iso x ≤ 27 := by
+  cases x with
+  | nil => simp
+  | cons v r =>
+    have h := (iso_pair_bound (v :: r) hx hb).1 (by simp)
+    have hl : (v :: r).length ≤ 7 := hlen
+    omega
+
+/-- The §7 defect: the amount by which the block sum falls short of the whole form at
+`(a, b, c) = (4369, -6314, -100)`. -/
+def defect (x : List Int) : Int :=
+  Q 4369 (-6314) (-100) x - Qblocks 4369 (-6314) (-100) x
+
+theorem defect_eq_iso (x : List Int) (hx : Nonneg x) : defect x = -100 * iso x := by
+  have := gd_identity 4369 (-6314) (-100) x hx
+  simp only [defect]
+  omega
+
+/-- **§7, lower bound.**  Every nonnegative signal with marks in `{0,…,3}` and length at most
+seven has defect at least `−2700`. -/
+theorem defect_ge_neg_2700 (x : List Int) (hx : Nonneg x) (hb : ∀ v ∈ x, v ≤ 3)
+    (hlen : x.length ≤ 7) : -2700 ≤ defect x := by
+  have hid := defect_eq_iso x hx
+  have h27 := iso_le_27 x hx hb hlen
+  have hnn := iso_nonneg x hx
+  omega
+
+/-- **§7, the bound is attained.**  `(3,0,3,0,3,0,3)` is a legitimate configuration — it is
+nonnegative, has marks in `{0,…,3}`, has length seven and does carry an isolated zero — and
+its defect is exactly `−2700`.  Together with `defect_ge_neg_2700` this is the §7 claim:
+the minimum over all such configurations is `−2700`. -/
+theorem defect_attained :
+    Nonneg [3,0,3,0,3,0,3]
+      ∧ (∀ v ∈ ([3,0,3,0,3,0,3] : List Int), v ≤ 3)
+      ∧ ([3,0,3,0,3,0,3] : List Int).length ≤ 7
+      ∧ 0 < iso [3,0,3,0,3,0,3]
+      ∧ defect [3,0,3,0,3,0,3] = -2700 :=
+  ⟨(nonneg_iff_forall_mem _).2 (by decide), by decide, by decide, by decide, by decide⟩
+
+end DefectMin
+
 /-! ## Part 3.  Masking and support -/
 
 section Masking
@@ -1572,9 +1693,145 @@ They exist so that the Lean definitions can be confronted with the independent P
 on identical data, and so that the failure of the extraction form is pinned down by a
 number rather than by a single hand-picked example. -/
 
-private def allLists : Nat → List (List Int)
+/-- The search space of every sweep below, and of the §7 minimality claim: all signals of
+length `n` with marks in `{0,…,3}`. -/
+def allLists : Nat → List (List Int)
   | 0     => [[]]
   | n + 1 => (allLists n).flatMap (fun l => [0, 1, 2, 3].map (fun v => v :: l))
+
+/-! ### §7 over the sweep's own search space
+
+The bound `defect_ge_neg_2700` is about *every* nonnegative signal with marks in `{0,…,3}`
+and length at most seven.  Specialised to the `21 845` signals the sweeps enumerate, it says
+that the running minimum `defectMin` printed below can never drop under `−2700` — and, with
+`(3,0,3,0,3,0,3)` sitting in `allLists 7`, that it reaches exactly `−2700` there.  Nothing
+here is decided by enumeration: `defectMin_eq_neg_2700` is a proof. -/
+
+/-- Every enumerated signal has the length, sign and mark bound the sweep intends. -/
+theorem allLists_spec : ∀ n : Nat, ∀ x ∈ allLists n,
+    x.length = n ∧ Nonneg x ∧ ∀ v ∈ x, v ≤ 3 := by
+  intro n
+  induction n with
+  | zero =>
+    intro x hx
+    have hnil : x = [] := by simpa [allLists] using hx
+    subst hnil
+    exact ⟨rfl, trivial, by simp⟩
+  | succ n ih =>
+    intro x hx
+    have heq : allLists (n + 1)
+        = (allLists n).flatMap (fun l => [0, 1, 2, 3].map (fun v => v :: l)) := rfl
+    rw [heq] at hx
+    rcases List.mem_flatMap.1 hx with ⟨l, hl, hxl⟩
+    rcases List.mem_map.1 hxl with ⟨v, hv, rfl⟩
+    obtain ⟨hlen, hnn, hb⟩ := ih l hl
+    have hv3 : 0 ≤ v ∧ v ≤ 3 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hv
+      rcases hv with rfl | rfl | rfl | rfl <;> decide
+    refine ⟨by simp [hlen], ⟨hv3.1, hnn⟩, ?_⟩
+    intro w hw
+    rcases List.mem_cons.1 hw with rfl | hw
+    · exact hv3.2
+    · exact hb w hw
+
+theorem mem_allLists_cons {n : Nat} {v : Int} {l : List Int}
+    (hv : v ∈ ([0,1,2,3] : List Int)) (hl : l ∈ allLists n) : v :: l ∈ allLists (n + 1) := by
+  show v :: l ∈ (allLists n).flatMap (fun l => [0, 1, 2, 3].map (fun v => v :: l))
+  exact List.mem_flatMap.2 ⟨l, hl, List.mem_map.2 ⟨v, hv, rfl⟩⟩
+
+theorem alternating_mem_allLists : ([3,0,3,0,3,0,3] : List Int) ∈ allLists 7 := by
+  have h0 : ([] : List Int) ∈ allLists 0 := by decide
+  exact mem_allLists_cons (by decide) (mem_allLists_cons (by decide)
+    (mem_allLists_cons (by decide) (mem_allLists_cons (by decide)
+      (mem_allLists_cons (by decide) (mem_allLists_cons (by decide)
+        (mem_allLists_cons (by decide) h0))))))
+
+/-- One step of the running minimum: signals without an isolated zero are skipped, matching
+the §7 phrase "over all configurations with an isolated zero". -/
+def defectStep (acc : Int) (x : List Int) : Int :=
+  if 0 < iso x then (if defect x < acc then defect x else acc) else acc
+
+/-- The smallest defect among the signals of length `n` that carry an isolated zero; `0` when
+there are none (which is a harmless upper start, since every defect here is `≤ 0`). -/
+def defectMin (n : Nat) : Int := (allLists n).foldl defectStep 0
+
+theorem defectStep_le (acc : Int) (x : List Int) : defectStep acc x ≤ acc := by
+  simp only [defectStep]
+  by_cases h : 0 < iso x
+  · rw [if_pos h]
+    by_cases h' : defect x < acc
+    · rw [if_pos h']; omega
+    · rw [if_neg h']; omega
+  · rw [if_neg h]; omega
+
+theorem defectStep_ge {acc : Int} {x : List Int} (hacc : -2700 ≤ acc)
+    (hx : -2700 ≤ defect x) : -2700 ≤ defectStep acc x := by
+  simp only [defectStep]
+  by_cases h : 0 < iso x
+  · rw [if_pos h]
+    by_cases h' : defect x < acc
+    · rw [if_pos h']; omega
+    · rw [if_neg h']; omega
+  · rw [if_neg h]; omega
+
+theorem foldl_defectStep_le_acc :
+    ∀ (l : List (List Int)) (acc : Int), l.foldl defectStep acc ≤ acc := by
+  intro l
+  induction l with
+  | nil => intro acc; exact Int.le_refl acc
+  | cons x t ih =>
+    intro acc
+    have h1 := ih (defectStep acc x)
+    have h2 := defectStep_le acc x
+    rw [List.foldl_cons]
+    omega
+
+theorem foldl_defectStep_ge :
+    ∀ (l : List (List Int)) (acc : Int), -2700 ≤ acc →
+      (∀ x ∈ l, -2700 ≤ defect x) → -2700 ≤ l.foldl defectStep acc := by
+  intro l
+  induction l with
+  | nil => intro acc hacc _; exact hacc
+  | cons x t ih =>
+    intro acc hacc hall
+    rw [List.foldl_cons]
+    exact ih (defectStep acc x) (defectStep_ge hacc (hall x (List.mem_cons_self ..)))
+      (fun z hz => hall z (List.mem_cons_of_mem _ hz))
+
+theorem foldl_defectStep_le :
+    ∀ (l : List (List Int)) (acc : Int) (y : List Int), y ∈ l → 0 < iso y →
+      l.foldl defectStep acc ≤ defect y := by
+  intro l
+  induction l with
+  | nil => intro _ y hy _; simp at hy
+  | cons x t ih =>
+    intro acc y hy hiso
+    rw [List.foldl_cons]
+    rcases List.mem_cons.1 hy with rfl | hy
+    · have h1 := foldl_defectStep_le_acc t (defectStep acc y)
+      have h2 : defectStep acc y ≤ defect y := by
+        simp only [defectStep, if_pos hiso]
+        by_cases h' : defect y < acc
+        · rw [if_pos h']; omega
+        · rw [if_neg h']; omega
+      omega
+    · exact ih (defectStep acc x) y hy hiso
+
+/-- **§7 over the search space, lower bound.**  For `n ≤ 7` the running minimum never drops
+under `−2700`. -/
+theorem defectMin_ge_neg_2700 (n : Nat) (hn : n ≤ 7) : -2700 ≤ defectMin n :=
+  foldl_defectStep_ge (allLists n) 0 (by omega) (fun x hx =>
+    have h := allLists_spec n x hx
+    defect_ge_neg_2700 x h.2.1 h.2.2 (by omega))
+
+/-- **§7 over the search space, exactly.**  `−2700` is the minimum defect over all
+configurations with an isolated zero, marks in `{0,…,3}` and length seven. -/
+theorem defectMin_eq_neg_2700 : defectMin 7 = -2700 := by
+  have hge := defectMin_ge_neg_2700 7 (by omega)
+  have hle : defectMin 7 ≤ defect [3,0,3,0,3,0,3] :=
+    foldl_defectStep_le (allLists 7) 0 [3,0,3,0,3,0,3] alternating_mem_allLists (by decide)
+  rw [defect_attained.2.2.2.2] at hle
+  omega
 
 /-- **Theorem 2.1, its extraction form, and Corollary 2.1 — in one pass.**  Per signal the
 triple counts violations of
@@ -1686,6 +1943,11 @@ private def copositiveCounts (c : Nat → Nat → Int) (n : Nat) : Nat × Nat :=
 #eval (List.range 8).map submaskCounts
 -- Expected: second component all `0`, first nonzero (the test is not vacuous).
 #eval (List.range 8).map (copositiveCounts cNeg)
+-- Expected: `[0, 0, 0, -900, -900, -1800, -1800, -2700]`  — the §7 running minimum of the
+-- defect over the configurations with an isolated zero.  Unlike the lines above this one is
+-- backed by proofs and not only by the enumeration: `defectMin_ge_neg_2700` bounds every
+-- entry from below and `defectMin_eq_neg_2700` pins the last one down.
+#eval (List.range 8).map defectMin
 
 end Checks
 
